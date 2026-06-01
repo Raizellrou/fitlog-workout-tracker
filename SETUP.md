@@ -26,7 +26,7 @@ before moving on. Total time: ~15 minutes.
 2. App nickname: `fitlog-web`.
 3. **Do NOT** check "Firebase Hosting" (we use Vercel). Click **Register app**.
 4. You'll see a `firebaseConfig` code block. **Keep this tab open** — you need
-   these 7 values in Part 2. It looks like:
+   these values in Part 2. It looks like:
 
    ```js
    const firebaseConfig = {
@@ -91,11 +91,35 @@ read/write their own.
 
 ---
 
+### Step 1.6 — Add trusted domains for sign-in 🖱️ ⚠️ do this BEFORE testing locally
+Without this step, the Google sign-in popup will fail with a connection error on
+both `localhost` and your Vercel URL. Do it once for both now.
+
+1. Firebase console → **Authentication → Settings** tab.
+2. Scroll down to **Authorized domains** (may be labelled **Add trusted domains**
+   on your console version — it's the same thing).
+3. Click **Add domain** and add these **two** entries one at a time:
+
+   | Domain to add | Used for |
+   |---|---|
+   | `localhost` | local dev (`npm run dev`) |
+   | `your-app.vercel.app` | production (fill in after Step 3.4) |
+
+   > Add `localhost` now. Come back and add the Vercel domain after Step 3.4
+   > once you know the exact URL.
+
+4. Click **Add** after each entry.
+
+✅ `localhost` appears in the trusted/authorized domains list.
+✅ Google sign-in popup no longer shows a connection error on `localhost`.
+
+---
+
 ## Part 2 — Run It Locally
 
 ### Step 2.1 — Give Claude your Firebase keys 💻
-Copy the 7 values from Step 1.2 and paste them to Claude in this format (just
-fill in the blanks — Claude will create the `.env` file for you):
+Copy the values from Step 1.2 and paste them to Claude (just fill in the blanks
+— Claude will create the `.env` file for you):
 
 ```
 apiKey: ...
@@ -109,7 +133,7 @@ measurementId: ...
 
 > 🔒 These keys are safe to share with Claude and safe in the client bundle —
 > your Firestore **rules** are what actually protect the data. They will live in
-> `.env`, which is gitignored (never committed).
+> `.env`, which is gitignored and never committed.
 
 ✅ Claude confirms `.env` is created.
 
@@ -118,9 +142,11 @@ measurementId: ...
 ### Step 2.2 — Start the dev server 💻
 Tell Claude **"run the dev server"** (or run `npm run dev` yourself).
 
-1. Open the printed URL (usually **http://localhost:5173**) in Chrome.
+1. Open the printed URL in Chrome (usually **http://localhost:5173** — Vite may
+   pick a higher port like `5176` if others are in use, it will print the exact
+   URL).
 2. Click **Continue with Google** and sign in.
-3. Log a test exercise, log a meal, finish a session.
+3. Log a test exercise, add a meal, finish the session.
 
 ✅ You can sign in and your data appears. Refresh the page — it persists.
 
@@ -130,7 +156,7 @@ Tell Claude **"run the dev server"** (or run `npm run dev` yourself).
 1. Back in the Firebase console → **Firestore Database → Data** tab.
 2. You should now see: `users → {your-uid} → data → fitlog`.
 
-✅ Your workout/meal data is in the cloud. (Open the app on your phone later and
+✅ Your workout/meal data is in the cloud. (Open the app on your phone later —
 the same data appears after sign-in.)
 
 ---
@@ -148,9 +174,10 @@ the same data appears after sign-in.)
 ### Step 3.2 — Import the repo 🖱️
 1. Click **Add New… → Project**.
 2. Find **`fitlog-workout-tracker`** in the list → click **Import**.
-   (If it's not listed, click **Adjust GitHub App Permissions** and grant access.)
+   (If it's not listed, click **Adjust GitHub App Permissions** and grant access
+   to the repo.)
 3. Vercel auto-detects **Vite** — leave Framework Preset, Build Command, and
-   Output Directory as detected.
+   Output Directory as detected. Don't change anything here.
 4. **Don't deploy yet** — expand **Environment Variables** first (next step).
 
 ✅ You're on the "Configure Project" screen with env-var fields visible.
@@ -158,7 +185,7 @@ the same data appears after sign-in.)
 ---
 
 ### Step 3.3 — Add environment variables 🖱️
-Add all 7 (same names as your `.env`). For each: type the **Name**, paste the
+Add all 7 (same values as your `.env`). For each: type the **Name**, paste the
 **Value**, click **Add**.
 
 | Name | Value |
@@ -169,30 +196,33 @@ Add all 7 (same names as your `.env`). For each: type the **Name**, paste the
 | `VITE_FIREBASE_STORAGE_BUCKET` | *(your storageBucket)* |
 | `VITE_FIREBASE_MESSAGING_SENDER_ID` | *(your messagingSenderId)* |
 | `VITE_FIREBASE_APP_ID` | *(your appId)* |
-| `VITE_FIREBASE_MEASUREMENT_ID` | *(your measurementId, or skip)* |
+| `VITE_FIREBASE_MEASUREMENT_ID` | *(your measurementId, or leave blank)* |
 
-> 💡 Tip: Claude can print these as ready-to-paste pairs from your `.env` — just ask.
+> 💡 Tip: Ask Claude to print these as ready-to-paste pairs directly from your
+> `.env`.
 
-✅ All 7 rows listed under Environment Variables.
+✅ All 7 rows are listed under Environment Variables.
 
 ---
 
 ### Step 3.4 — Deploy 🖱️
 1. Click **Deploy**.
-2. Wait ~1–2 min for the build.
-3. Click the preview / **Visit** to open your live URL
-   (`https://fitlog-workout-tracker.vercel.app` or similar).
+2. Wait ~1–2 min for the build to finish.
+3. Click **Visit** to open your live URL (e.g. `fitlog-workout-tracker.vercel.app`).
 
-✅ The site loads. **It will fail Google sign-in until you do Step 3.5** — that's expected.
+✅ The site loads. **Sign-in will fail until you complete Step 3.5** — that's
+expected.
 
 ---
 
-### Step 3.5 — Authorize the Vercel domain in Firebase 🖱️ ⚠️ critical
-Google sign-in only works on domains Firebase trusts.
+### Step 3.5 — Add your Vercel domain to Firebase trusted domains 🖱️ ⚠️ critical
+You already added `localhost` in Step 1.6. Now add your live Vercel URL.
 
-1. Copy your live Vercel domain (e.g. `fitlog-workout-tracker.vercel.app`).
-2. Firebase console → **Authentication → Settings** tab → **Authorized domains**.
-3. Click **Add domain**, paste the Vercel domain (no `https://`), click **Add**.
+1. Copy your Vercel domain from the browser address bar
+   (e.g. `fitlog-workout-tracker.vercel.app` — **no** `https://`).
+2. Firebase console → **Authentication → Settings** tab → **Authorized domains**
+   (or **Add trusted domains**).
+3. Click **Add domain**, paste the Vercel domain, click **Add**.
 
 ✅ Reload your Vercel URL → **Continue with Google** now works on the live site.
 
@@ -200,30 +230,33 @@ Google sign-in only works on domains Firebase trusts.
 
 ### Step 3.6 — Install on your phone 🖱️
 - **iPhone (Safari):** open the Vercel URL → **Share** → **Add to Home Screen**.
-- **Android (Chrome):** open the URL → tap the **Install** banner / menu → **Install**.
+- **Android (Chrome):** open the URL → tap the **Install** banner → **Install**.
 
-✅ The FitLog icon (lime dumbbell) is on your home screen and opens fullscreen.
+✅ The FitLog icon (lime dumbbell) appears on your home screen and opens
+fullscreen, like a native app.
 
 ---
 
 ## Done 🎉
 
 You now have a live, installable, multi-device-synced fitness tracker. Every
-`git push` to `master` auto-deploys a new version on Vercel.
+`git push` to `master` automatically triggers a new Vercel deploy.
 
 ### Quick reference
 | Action | Command |
 |---|---|
 | Run locally | `npm run dev` |
-| Build | `npm run build` |
+| Production build | `npm run build` |
 | Lint | `npm run lint` |
 | Format | `npm run format` |
-| Deploy | just `git push` (Vercel auto-builds) |
+| Deploy | `git push` (Vercel auto-builds) |
 
 ### Troubleshooting
-- **`Missing Firebase env vars` on startup** → `.env` is missing or a key is
-  blank. Re-check Step 2.1.
-- **`auth/unauthorized-domain` on the live site** → you skipped Step 3.5.
-- **Sign-in popup blocked** → allow popups for the site, or try again.
-- **Data not syncing** → confirm Firestore rules were published (Step 1.5) and
-  you're signed in.
+| Symptom | Fix |
+|---|---|
+| `Missing Firebase env vars` on startup | `.env` is missing or a key is blank — re-check Step 2.1 |
+| Sign-in popup shows "This site can't be reached" | `localhost` not in trusted domains — do Step 1.6 |
+| `auth/unauthorized-domain` on the live site | Vercel domain not added — do Step 3.5 |
+| Sign-in popup is immediately blocked | Allow popups for the site in Chrome settings |
+| Data not syncing across devices | Confirm Firestore rules published (Step 1.5) and you're signed in on both devices |
+| Vercel build fails with missing env var | Re-check Step 3.3 — all 7 vars must be set in Vercel, not just `.env` |
