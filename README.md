@@ -1,55 +1,72 @@
-# FitLog — Workout & Food Tracker PWA
+# FitLog — Workout & Food Tracker
 
-A personal fitness tracker with workout logging, food/macro tracking, and session history.
+A fitness tracker **PWA** with **multi-device cloud sync**. Log workouts and
+nutrition, see your streak and volume trend, and install it to your phone's home
+screen. Built with React + Vite + Firebase, deployed on Vercel.
 
-## Files
-- `index.html` — The entire app (UI + logic)
-- `manifest.json` — PWA install metadata
-- `sw.js` — Service worker (offline support + installability)
-- `icon-192.png` & `icon-512.png` — App icons *(you need to add these — see below)*
+![React](https://img.shields.io/badge/React-19-61dafb)
+![Vite](https://img.shields.io/badge/Vite-6-646cff)
+![Firebase](https://img.shields.io/badge/Firebase-Firestore%20%2B%20Auth-ffca28)
+![PWA](https://img.shields.io/badge/PWA-installable-5a0fc8)
 
-## Adding App Icons
-You need two PNG icons for the PWA install prompt and home screen:
-- `icon-192.png` — 192×192 px
-- `icon-512.png` — 512×512 px
+## Features
 
-Quick option: use any image editor (or a free tool like https://favicon.io) to create
-a simple icon with the letters "FL" or a dumbbell on a dark (#0d0d0f) background.
+- 🏋️ **Workout logger** — exercises, sets, reps, weight, live volume + session timer
+- ✅ **Set completion** toggle with visual feedback
+- 🍎 **Food & macro logger** — calories, protein, carbs, fats by meal type
+- 🔥 **Streak tracker** + **volume-trend chart**
+- ☁️ **Real-time cloud sync** across all your devices (Firebase)
+- 📴 **Offline-first** — works with no connection, syncs when back online
+- 📱 **Installable PWA** on iOS and Android
 
-## Deploy to Netlify (Free, ~2 minutes)
-1. Go to https://netlify.com and sign up free
-2. From your dashboard, drag the entire `workout-tracker` folder onto the deploy area
-3. Netlify gives you a live URL like `https://fitlog-abc123.netlify.app`
-4. Open that URL on your phone in Safari (iOS) or Chrome (Android)
+## Tech Stack
 
-## Install on iPhone
-1. Open the Netlify URL in **Safari**
-2. Tap the **Share** button (box with arrow)
-3. Tap **Add to Home Screen**
-4. Tap **Add** — the FitLog icon appears on your home screen!
+| Layer | Choice |
+|---|---|
+| Framework | React 19 + Vite |
+| Styling | Tailwind CSS v4 |
+| Backend / sync | Firebase (Firestore + Auth) |
+| Charts | Recharts |
+| PWA | vite-plugin-pwa |
+| Hosting | Vercel |
 
-## Install on Android
-1. Open the Netlify URL in **Chrome**
-2. Chrome will show an **"Add to Home Screen"** banner automatically
-3. Tap **Install** — done!
+## Getting Started
 
-## Features (this build)
-- [x] Workout logger — exercises, sets, reps, weight with volume tracking
-- [x] Set completion toggle (marks sets done with visual feedback)
-- [x] Session timer (start/pause)
-- [x] Food/macro logger — calories, protein, carbs, fats by meal type
-- [x] Session history with date and exercise list
-- [x] Workout streak tracker
-- [x] Full offline support via service worker
-- [x] Data persists in localStorage (survives browser close)
-- [x] PWA-ready (installable on iOS and Android)
+```bash
+# 1. Install dependencies
+npm install
 
-## Coming Next (Session 2)
-- Progress charts (weight over time, volume trends)
-- AI weekly summary via Claude API
-- Body weight log
-- Workout templates
+# 2. Configure Firebase
+cp .env.example .env      # then fill in your Firebase web config
 
-## Data Storage
-All data is saved in your browser's `localStorage` under the key `fitlog_v1`.
-Data is private to your device. To back up, export via browser DevTools → Application → Local Storage.
+# 3. Run the dev server
+npm run dev
+```
+
+### Firebase setup (one-time)
+
+1. Create a project at [console.firebase.google.com](https://console.firebase.google.com).
+2. Add a **Web app**, copy the config into `.env`.
+3. Enable **Authentication → Google** sign-in.
+4. Create a **Firestore** database.
+5. Publish the rules from [`firestore.rules`](firestore.rules).
+
+## Deploy to Vercel
+
+1. Push to GitHub, then **Import Project** in Vercel (auto-detects Vite).
+2. Add your `VITE_FIREBASE_*` vars under **Settings → Environment Variables**.
+3. Deploy. Then add your `*.vercel.app` domain to **Firebase → Authentication →
+   Settings → Authorized domains** so Google sign-in works on the live site.
+
+## Install on your phone
+
+- **iPhone**: open the live URL in Safari → Share → **Add to Home Screen**.
+- **Android**: open in Chrome → tap the **Install** prompt.
+
+## Project layout
+
+See [CLAUDE.md](CLAUDE.md) for the full architecture overview and conventions.
+
+## License
+
+MIT

@@ -1,21 +1,30 @@
 # Dependencies
 node_modules/
 
-# Build / cache
+# Build output
 dist/
-.cache/
-*.log
+dev-dist/
+*.local
 
-# Environment
+# Environment — never commit real keys
 .env
-.env.local
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
 
 # OS / editor cruft
 .DS_Store
 Thumbs.db
 desktop.ini
-.vscode/
+.vscode/*
+!.vscode/extensions.json
 .idea/
+
+# Vercel
+.vercel
 
 # Python (icon tooling)
 __pycache__/
