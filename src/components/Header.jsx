@@ -1,7 +1,7 @@
 import { headerDate } from '@/lib/format';
 import { useAuth } from '@/context/AuthContext';
 
-const TAB_TITLES = { workout: 'WORKOUT', food: 'NUTRITION', history: 'HISTORY' };
+const TAB_TITLES = { workout: 'WORKOUT', food: 'NUTRITION', cardio: 'CARDIO', history: 'HISTORY' };
 
 function LogoutIcon() {
   return (

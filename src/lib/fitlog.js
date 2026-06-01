@@ -19,6 +19,8 @@ export function emptyState() {
     history: [],
     streak: 0,
     lastWorkoutDate: null,
+    muscleGroupHistory: {},  // { [group: string]: ISO date string }
+    cardioSessions: [],      // CardioSession[]
   };
 }
 
@@ -34,6 +36,7 @@ export function makeExercise() {
   return {
     id: crypto.randomUUID(),
     name: '',
+    muscleGroup: null,
     sets: [{ reps: '', weight: '', done: false }],
   };
 }
@@ -84,4 +87,112 @@ export function nextStreak(state) {
   if (!last) return 1;
   if (last === yesterdayISO() || last === TODAY) return (state.streak || 0) + 1;
   return 1;
+}
+
+// ─────────────────────────────────────────────
+// ── MUSCLE GROUP TRACKING ──
+// ─────────────────────────────────────────────
+
+export const MUSCLE_GROUPS = [
+  'chest', 'back', 'shoulders', 'biceps', 'triceps', 'legs', 'core', 'calves',
+];
+
+export const MUSCLE_RECOVERY_HOURS = {
+  chest: 72,
+  back: 72,
+  shoulders: 72,
+  biceps: 48,
+  triceps: 48,
+  legs: 72,
+  core: 48,
+  calves: 24,
+};
+
+const MUSCLE_PATTERNS = [
+  { pattern: /bench|push.?up|fly|pec/i,                       group: 'chest' },
+  { pattern: /pull.?up|pull.?down|row|lat\b|deadlift/i,       group: 'back' },
+  { pattern: /squat|lunge|leg.?press|hamstring|glute|rdl/i,   group: 'legs' },
+  { pattern: /shoulder|lateral.?raise|arnold|ohp/i,           group: 'shoulders' },
+  { pattern: /\bbicep|\bcurl\b/i,                              group: 'biceps' },
+  { pattern: /tricep|skull.?crusher|pushdown/i,                group: 'triceps' },
+  { pattern: /plank|crunch|sit.?up|\bab\b|cable.?crunch/i,    group: 'core' },
+  { pattern: /\bcalf\b|calves|calf.?raise/i,                   group: 'calves' },
+];
+
+/**
+ * Auto-detect muscle group from an exercise name.
+ * Returns a group string or null if no match.
+ */
+export function detectMuscleGroup(name) {
+  if (!name) return null;
+  for (const { pattern, group } of MUSCLE_PATTERNS) {
+    if (pattern.test(name)) return group;
+  }
+  return null;
+}
+
+/**
+ * Returns recovery status for every muscle group given muscleGroupHistory.
+ * Status values: 'ready' | 'recovering' | 'needs_rest'
+ */
+export function muscleGroupStatuses(muscleGroupHistory = {}) {
+  const nowMs = Date.now();
+  return Object.fromEntries(
+    MUSCLE_GROUPS.map((group) => {
+      const lastDate = muscleGroupHistory[group];
+      if (!lastDate) return [group, 'ready'];
+      const hoursAgo =
+        (nowMs - new Date(lastDate + 'T00:00:00').getTime()) / 3_600_000;
+      const recovery = MUSCLE_RECOVERY_HOURS[group];
+      if (hoursAgo < 24) return [group, 'needs_rest'];
+      if (hoursAgo < recovery) return [group, 'recovering'];
+      return [group, 'ready'];
+    })
+  );
+}
+
+/** Extract unique, non-null muscle groups from an exercises array. */
+export function extractMuscleGroups(exercises) {
+  return [...new Set(exercises.map((e) => e.muscleGroup).filter(Boolean))];
+}
+
+// ─────────────────────────────────────────────
+// ── CARDIO ──
+// ─────────────────────────────────────────────
+
+export const CARDIO_TYPES = ['run', 'jog', 'walk'];
+
+const CARDIO_MET = { run: 1.036, jog: 0.85, walk: 0.53 };
+
+/**
+ * Calculate pace and estimated calories for a cardio session.
+ * @param {{ type, distanceKm, durationMin, weightKg? }} params
+ * @returns {{ pace: number, calories: number }}
+ *   pace in min/km (0 if distance is 0), calories estimated
+ */
+export function calcCardio({ type, distanceKm, durationMin, weightKg = 70 }) {
+  const d = Number(distanceKm) || 0;
+  const t = Number(durationMin) || 0;
+  const pace = d > 0 ? Math.round((t / d) * 10) / 10 : 0;
+  const calories = d > 0 ? Math.round(weightKg * d * (CARDIO_MET[type] ?? 1)) : 0;
+  return { pace, calories };
+}
+
+/**
+ * Compute cardio stats for the current week (last 7 days).
+ * @returns {{ totalKm: number, sessions: number, bestPace: number }}
+ *   bestPace is min/km — lower is faster (0 means no data)
+ */
+export function weeklyCardioStats(cardioSessions = []) {
+  const weekAgo = new Date();
+  weekAgo.setDate(weekAgo.getDate() - 7);
+  const weekAgoISO = weekAgo.toISOString().split('T')[0];
+  const thisWeek = cardioSessions.filter((s) => s.date >= weekAgoISO);
+  const totalKm = Math.round(
+    thisWeek.reduce((s, c) => s + (c.distanceKm || 0), 0) * 10
+  ) / 10;
+  const bestPace = thisWeek
+    .filter((c) => c.pace > 0)
+    .reduce((best, c) => (best === 0 || c.pace < best ? c.pace : best), 0);
+  return { totalKm, sessions: thisWeek.length, bestPace };
 }

@@ -5,12 +5,13 @@ import SignIn from '@/components/SignIn';
 import FinishModal from '@/components/FinishModal';
 import WorkoutScreen from '@/screens/WorkoutScreen';
 import FoodScreen from '@/screens/FoodScreen';
+import CardioScreen from '@/screens/CardioScreen';
 import HistoryScreen from '@/screens/HistoryScreen';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { useFitlogData } from '@/hooks/useFitlogData';
 import { useTimer } from '@/hooks/useTimer';
-import { nextStreak } from '@/lib/fitlog';
+import { nextStreak, extractMuscleGroups } from '@/lib/fitlog';
 
 export default function App() {
   const { user, loading, isAuthenticated } = useAuth();
@@ -44,13 +45,20 @@ export default function App() {
 
   const finishSession = () => {
     const name = state.sessionName.trim() || 'Workout';
+    const muscleGroups = extractMuscleGroups(state.exercises);
+
+    // Update muscleGroupHistory: record today for every group worked
+    const mgUpdates = Object.fromEntries(muscleGroups.map((g) => [g, today]));
+
     const session = {
       id: crypto.randomUUID(),
       date: today,
       name,
       exercises: structuredClone(state.exercises),
       duration: timer.elapsed,
+      muscleGroups,
     };
+
     update((s) => ({
       ...s,
       history: [session, ...s.history],
@@ -58,7 +66,9 @@ export default function App() {
       lastWorkoutDate: today,
       exercises: [],
       sessionName: 'Morning Session',
+      muscleGroupHistory: { ...(s.muscleGroupHistory ?? {}), ...mgUpdates },
     }));
+
     timer.reset();
     setModalOpen(false);
     setTab('history');
@@ -70,6 +80,8 @@ export default function App() {
     else if (tab === 'food') foodSubmitRef.current?.();
   };
 
+  // CTA only shown on workout + food tabs
+  const showCta = tab === 'workout' || tab === 'food';
   const ctaLabel = tab === 'workout' ? 'FINISH SESSION' : 'LOG MEAL';
   const summary = `${state.sessionName.trim() || 'Workout'} · ${state.exercises.length} exercise(s)`;
 
@@ -85,10 +97,13 @@ export default function App() {
         {tab === 'food' && (
           <FoodScreen state={state} update={update} formRef={foodSubmitRef} />
         )}
+        {tab === 'cardio' && (
+          <CardioScreen state={state} update={update} />
+        )}
         {tab === 'history' && <HistoryScreen state={state} />}
       </div>
 
-      {tab !== 'history' && (
+      {showCta && (
         <div className="bottom-nav">
           <button className="cta-btn" onClick={handleCta}>
             {ctaLabel}

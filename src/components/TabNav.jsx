@@ -1,6 +1,7 @@
 const TABS = [
   { id: 'workout', label: 'Workout' },
-  { id: 'food', label: 'Food' },
+  { id: 'food',    label: 'Food' },
+  { id: 'cardio',  label: 'Cardio' },
   { id: 'history', label: 'History' },
 ];
 

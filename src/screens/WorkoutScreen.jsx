@@ -6,14 +6,23 @@ import {
   makeSet,
   setVolume,
   workoutStats,
+  MUSCLE_GROUPS,
+  detectMuscleGroup,
+  muscleGroupStatuses,
 } from '@/lib/fitlog';
+
+const STATUS_LABEL = {
+  ready: 'Ready',
+  recovering: 'Rest',
+  needs_rest: 'Skip',
+};
 
 export default function WorkoutScreen({ state, update, timer }) {
   const { exercises, sessionName } = state;
   const stats = workoutStats(exercises);
+  const statuses = muscleGroupStatuses(state.muscleGroupHistory ?? {});
   const focusLastRef = useRef(false);
 
-  // Focus the most recently added exercise name input.
   useEffect(() => {
     if (!focusLastRef.current) return;
     focusLastRef.current = false;
@@ -32,7 +41,20 @@ export default function WorkoutScreen({ state, update, timer }) {
   const updateExerciseName = (id, name) =>
     update((s) => ({
       ...s,
-      exercises: s.exercises.map((e) => (e.id === id ? { ...e, name } : e)),
+      exercises: s.exercises.map((e) => {
+        if (e.id !== id) return e;
+        // Auto-suggest muscle group only while it hasn't been set
+        const suggested = !e.muscleGroup ? detectMuscleGroup(name) : e.muscleGroup;
+        return { ...e, name, muscleGroup: suggested };
+      }),
+    }));
+
+  const updateMuscleGroup = (id, group) =>
+    update((s) => ({
+      ...s,
+      exercises: s.exercises.map((e) =>
+        e.id === id ? { ...e, muscleGroup: group || null } : e
+      ),
     }));
 
   const addSet = (id) =>
@@ -75,6 +97,7 @@ export default function WorkoutScreen({ state, update, timer }) {
 
   return (
     <div>
+      {/* ── Live stats ── */}
       <div className="stats-row">
         <div className="stat-card">
           <div className="stat-val">{stats.exercises}</div>
@@ -90,6 +113,24 @@ export default function WorkoutScreen({ state, update, timer }) {
         </div>
       </div>
 
+      {/* ── Muscle group recovery grid ── */}
+      <div style={{ marginBottom: 16 }}>
+        <div className="muscle-section-title">Muscle recovery</div>
+        <div className="muscle-grid">
+          {MUSCLE_GROUPS.map((group) => {
+            const status = statuses[group];
+            return (
+              <div key={group} className={`muscle-card muscle-card--${status}`}>
+                <div className="muscle-name">{group}</div>
+                <div className="muscle-status-dot" />
+                <div className="muscle-status-label">{STATUS_LABEL[status]}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Session header ── */}
       <div className="session-header">
         <div className="session-name-wrap">
           <div className="session-dot" />
@@ -110,6 +151,7 @@ export default function WorkoutScreen({ state, update, timer }) {
         </button>
       </div>
 
+      {/* ── Exercise list ── */}
       {exercises.length === 0 ? (
         <EmptyState
           icon="🏋️"
@@ -121,14 +163,29 @@ export default function WorkoutScreen({ state, update, timer }) {
           <div className="exercise-entry" key={ex.id}>
             <div className="exercise-header">
               <div className="exercise-num">{exIdx + 1}</div>
-              <input
-                className="exercise-name-input"
-                type="text"
-                placeholder="Exercise name..."
-                maxLength={50}
-                value={ex.name}
-                onChange={(e) => updateExerciseName(ex.id, e.target.value)}
-              />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <input
+                  className="exercise-name-input"
+                  type="text"
+                  placeholder="Exercise name..."
+                  maxLength={50}
+                  value={ex.name}
+                  onChange={(e) => updateExerciseName(ex.id, e.target.value)}
+                />
+                <select
+                  className="muscle-group-select"
+                  value={ex.muscleGroup ?? ''}
+                  onChange={(e) => updateMuscleGroup(ex.id, e.target.value)}
+                  style={{ marginTop: 4 }}
+                >
+                  <option value="">— muscle group —</option>
+                  {MUSCLE_GROUPS.map((g) => (
+                    <option key={g} value={g}>
+                      {g.charAt(0).toUpperCase() + g.slice(1)}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <button
                 className="del-btn"
                 onClick={() => deleteExercise(ex.id)}
@@ -137,6 +194,7 @@ export default function WorkoutScreen({ state, update, timer }) {
                 ✕
               </button>
             </div>
+
             <div className="sets-header">
               <span>Set</span>
               <span>Weight</span>
@@ -144,6 +202,7 @@ export default function WorkoutScreen({ state, update, timer }) {
               <span>Vol</span>
               <span />
             </div>
+
             {ex.sets.map((set, sIdx) => {
               const vol = setVolume(set);
               return (
@@ -155,9 +214,7 @@ export default function WorkoutScreen({ state, update, timer }) {
                     min="0"
                     placeholder="kg"
                     value={set.weight}
-                    onChange={(e) =>
-                      updateSet(ex.id, sIdx, 'weight', e.target.value)
-                    }
+                    onChange={(e) => updateSet(ex.id, sIdx, 'weight', e.target.value)}
                   />
                   <input
                     className={`set-input${set.done ? ' done' : ''}`}
@@ -165,9 +222,7 @@ export default function WorkoutScreen({ state, update, timer }) {
                     min="0"
                     placeholder="reps"
                     value={set.reps}
-                    onChange={(e) =>
-                      updateSet(ex.id, sIdx, 'reps', e.target.value)
-                    }
+                    onChange={(e) => updateSet(ex.id, sIdx, 'reps', e.target.value)}
                   />
                   <span className="set-vol">{vol > 0 ? vol.toFixed(0) : '—'}</span>
                   <button
@@ -180,6 +235,7 @@ export default function WorkoutScreen({ state, update, timer }) {
                 </div>
               );
             })}
+
             <div className="add-set-row">
               <button className="add-set-btn" onClick={() => addSet(ex.id)}>
                 + add set
