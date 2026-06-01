@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Build / cache
+dist/
+.cache/
+*.log
+
+# Environment
+.env
+.env.local
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# Python (icon tooling)
+__pycache__/
+*.pyc
