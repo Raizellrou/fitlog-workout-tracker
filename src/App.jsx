@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import Header from '@/components/Header';
 import TabNav from '@/components/TabNav';
 import SignIn from '@/components/SignIn';
@@ -21,7 +21,6 @@ export default function App() {
 
   const [tab, setTab] = useState('workout');
   const [modalOpen, setModalOpen] = useState(false);
-  const foodSubmitRef = useRef(null);
 
   if (loading) {
     return (
@@ -75,14 +74,9 @@ export default function App() {
     showToast(`Session saved! 🔥 ${nextStreak(state)} day streak`);
   };
 
-  const handleCta = () => {
-    if (tab === 'workout') openFinish();
-    else if (tab === 'food') foodSubmitRef.current?.();
-  };
-
-  // CTA only shown on workout + food tabs
-  const showCta = tab === 'workout' || tab === 'food';
-  const ctaLabel = tab === 'workout' ? 'FINISH SESSION' : 'LOG MEAL';
+  // The workout tab has a bottom "finish" CTA; the food tab manages its own
+  // Add Meal button + modal, so no global CTA there.
+  const showCta = tab === 'workout';
   const summary = `${state.sessionName.trim() || 'Workout'} · ${state.exercises.length} exercise(s)`;
 
   return (
@@ -95,7 +89,7 @@ export default function App() {
           <WorkoutScreen state={state} update={update} timer={timer} />
         )}
         {tab === 'food' && (
-          <FoodScreen state={state} update={update} formRef={foodSubmitRef} />
+          <FoodScreen state={state} update={update} />
         )}
         {tab === 'cardio' && (
           <CardioScreen state={state} update={update} />
@@ -105,8 +99,8 @@ export default function App() {
 
       {showCta && (
         <div className="bottom-nav">
-          <button className="cta-btn" onClick={handleCta}>
-            {ctaLabel}
+          <button className="cta-btn" onClick={openFinish}>
+            FINISH SESSION
           </button>
         </div>
       )}

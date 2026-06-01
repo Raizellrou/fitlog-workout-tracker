@@ -2,291 +2,274 @@ import { useState } from 'react';
 import EmptyState from '@/components/EmptyState';
 import { useToast } from '@/context/ToastContext';
 import { useFoodSearch } from '@/hooks/useFoodSearch';
-import { MEAL_EMOJIS, MEAL_TYPES, macroTotals } from '@/lib/fitlog';
+import {
+  MEAL_EMOJIS,
+  MEAL_TYPES,
+  macroTotals,
+  mealMacros,
+  scaleMacros,
+  makeMeal,
+} from '@/lib/fitlog';
 
-const EMPTY_MANUAL = { name: '', cal: '', p: '', c: '', f: '' };
-
-// ── Macro preview card (used in both search and macro summary) ──
+// ── Top macro summary card ──
 function MacroCard({ val, label, color }) {
   return (
     <div className="macro-card">
-      <div className="macro-val" style={{ color }}>
-        {val}
-      </div>
+      <div className="macro-val" style={{ color }}>{val}</div>
       <div className="macro-label">{label}</div>
     </div>
   );
 }
 
-export default function FoodScreen({ state, update, formRef }) {
-  const { meals } = state;
+const EMPTY_MANUAL = { name: '', grams: '', cal: '', p: '', c: '', f: '' };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Add Meal modal — pick a meal type, then add one or more foods to it.
+// ─────────────────────────────────────────────────────────────────────────────
+function AddMealModal({ onClose, onSave, customFoods }) {
   const { showToast } = useToast();
 
-  // Search mode state
-  const { query, setQuery, results, loading, clearResults } = useFoodSearch();
-  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [mealType, setMealType] = useState('Breakfast');
+  const [foods, setFoods] = useState([]); // food items staged for this meal
+
+  // Food picker state
+  const { query, setQuery, results, clearResults } = useFoodSearch(customFoods);
+  const [selectedFood, setSelectedFood] = useState(null);
+  const [variant, setVariant] = useState(null);
   const [grams, setGrams] = useState('');
 
-  // Shared
-  const [mode, setMode] = useState('search'); // 'search' | 'manual'
-  const [mealType, setMealType] = useState('Breakfast');
+  // Manual-entry fallback (foods not in the database)
+  const [manual, setManual] = useState(null); // null = closed, else EMPTY_MANUAL shape
 
-  // Manual mode state
-  const [manual, setManual] = useState(EMPTY_MANUAL);
-
-  const totals = macroTotals(meals);
-
-  // ── Live macro preview for search mode ──
   const preview = (() => {
-    if (!selectedProduct || !grams) return null;
+    if (!variant || !grams) return null;
     const g = parseFloat(grams);
     if (!g || g <= 0) return null;
-    const { per100g } = selectedProduct;
-    return {
-      cal: Math.round((per100g.cal * g) / 100),
-      p: Math.round((per100g.p * g) / 100 * 10) / 10,
-      c: Math.round((per100g.c * g) / 100 * 10) / 10,
-      f: Math.round((per100g.f * g) / 100 * 10) / 10,
-    };
+    return scaleMacros(variant.per100g, g);
   })();
 
-  // ── Add food (search mode) ──
-  const addFromSearch = () => {
-    if (!selectedProduct) { showToast('Select a food first'); return; }
-    const g = parseFloat(grams);
-    if (!g || g <= 0) { showToast('Enter how many grams'); return; }
-    const { per100g } = selectedProduct;
-    const meal = {
-      id: crypto.randomUUID(),
-      name: selectedProduct.name,
-      grams: g,
-      per100g,
-      cal: Math.round((per100g.cal * g) / 100),
-      p: Math.round((per100g.p * g) / 100 * 10) / 10,
-      c: Math.round((per100g.c * g) / 100 * 10) / 10,
-      f: Math.round((per100g.f * g) / 100 * 10) / 10,
-      type: mealType,
-      emoji: MEAL_EMOJIS[mealType],
-      source: 'search',
-    };
-    update((s) => ({ ...s, meals: [...s.meals, meal] }));
-    setSelectedProduct(null);
+  const pickFood = (food) => {
+    setSelectedFood(food);
+    setVariant(food.variants[0]);
     setGrams('');
     clearResults();
-    showToast('Meal logged ✓');
   };
 
-  // ── Add food (manual mode) ──
-  const addFromManual = () => {
+  const resetPicker = () => {
+    setSelectedFood(null);
+    setVariant(null);
+    setGrams('');
+  };
+
+  // Add a database food (scaled by grams) to the staged meal
+  const addFoodItem = () => {
+    if (!selectedFood || !variant) { showToast('Select a food'); return; }
+    const g = parseFloat(grams);
+    if (!g || g <= 0) { showToast('Enter grams'); return; }
+    const suffix = variant.label !== 'default' ? ` (${variant.label})` : '';
+    setFoods((arr) => [
+      ...arr,
+      {
+        id: crypto.randomUUID(),
+        name: selectedFood.name + suffix,
+        grams: g,
+        foodId: selectedFood.id,
+        variantLabel: variant.label,
+        ...scaleMacros(variant.per100g, g),
+      },
+    ]);
+    resetPicker();
+  };
+
+  // Add a manual food (macros entered directly) to the staged meal
+  const addManualItem = () => {
     const name = manual.name.trim();
     if (!name) { showToast('Enter a food name'); return; }
-    const meal = {
-      id: crypto.randomUUID(),
-      name,
-      grams: null,
-      per100g: null,
-      cal: parseFloat(manual.cal) || 0,
-      p: parseFloat(manual.p) || 0,
-      c: parseFloat(manual.c) || 0,
-      f: parseFloat(manual.f) || 0,
-      type: mealType,
-      emoji: MEAL_EMOJIS[mealType],
-      source: 'manual',
-    };
-    update((s) => ({ ...s, meals: [...s.meals, meal] }));
-    setManual(EMPTY_MANUAL);
-    showToast('Meal logged ✓');
+    setFoods((arr) => [
+      ...arr,
+      {
+        id: crypto.randomUUID(),
+        name,
+        grams: parseFloat(manual.grams) || null,
+        foodId: null,
+        variantLabel: null,
+        cal: parseFloat(manual.cal) || 0,
+        p: parseFloat(manual.p) || 0,
+        c: parseFloat(manual.c) || 0,
+        f: parseFloat(manual.f) || 0,
+      },
+    ]);
+    setManual(null);
   };
 
-  const addFood = mode === 'search' ? addFromSearch : addFromManual;
+  const removeFoodItem = (id) =>
+    setFoods((arr) => arr.filter((f) => f.id !== id));
 
-  // Expose to parent CTA button
-  if (formRef) formRef.current = addFood;
+  const total = mealMacros({ foods });
 
-  const deleteFood = (id) =>
-    update((s) => ({ ...s, meals: s.meals.filter((m) => m.id !== id) }));
+  const save = () => {
+    if (foods.length === 0) { showToast('Add at least one food'); return; }
+    onSave(mealType, foods);
+  };
 
   return (
-    <div>
-      {/* ── Daily macro totals ── */}
-      <div className="macro-row">
-        <MacroCard val={Math.round(totals.cal)} label="kcal"    color="var(--accent)" />
-        <MacroCard val={`${Math.round(totals.p)}g`} label="Protein" color="#60b8ff" />
-        <MacroCard val={`${Math.round(totals.c)}g`} label="Carbs"   color="#ffaa40" />
-        <MacroCard val={`${Math.round(totals.f)}g`} label="Fats"    color="#ff6b9d" />
-      </div>
+    <div className="modal-overlay open" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal" style={{ maxHeight: '88vh', overflowY: 'auto', overflowX: 'hidden' }}>
+        <div className="modal-header">
+          <div className="modal-title">Add Meal</div>
+          <button className="modal-close" onClick={onClose} aria-label="Close">✕</button>
+        </div>
 
-      {/* ── Log food section ── */}
-      <div className="food-section">
-        <div className="food-section-title">Log food</div>
-        <div className="add-food-form">
-
-          {/* Mode toggle */}
-          <div className="mode-toggle">
+        {/* Meal type */}
+        <div className="meal-type-row">
+          {MEAL_TYPES.map((type) => (
             <button
-              className={`mode-toggle-btn${mode === 'search' ? ' active' : ''}`}
-              onClick={() => setMode('search')}
+              key={type}
+              className={`meal-type-btn${mealType === type ? ' active' : ''}`}
+              onClick={() => setMealType(type)}
             >
-              🔍 Search food
+              {MEAL_EMOJIS[type]} {type}
             </button>
-            <button
-              className={`mode-toggle-btn${mode === 'manual' ? ' active' : ''}`}
-              onClick={() => setMode('manual')}
-            >
-              ✏️ Manual entry
-            </button>
-          </div>
+          ))}
+        </div>
 
-          {/* Meal type picker (shared) */}
-          <div className="meal-type-row">
-            {MEAL_TYPES.map((type) => (
-              <button
-                key={type}
-                className={`meal-type-btn${mealType === type ? ' active' : ''}`}
-                onClick={() => setMealType(type)}
-              >
-                {type}
-              </button>
+        {/* Staged foods list */}
+        {foods.length > 0 && (
+          <div className="staged-foods">
+            {foods.map((f) => (
+              <div className="staged-food-row" key={f.id}>
+                <div className="staged-food-main">
+                  <span className="staged-food-name">{f.name}</span>
+                  <span className="staged-food-sub">
+                    {f.grams ? `${f.grams}g · ` : ''}
+                    P{Math.round(f.p)} C{Math.round(f.c)} F{Math.round(f.f)}
+                  </span>
+                </div>
+                <span className="staged-food-cal">{Math.round(f.cal)}</span>
+                <button className="del-btn" onClick={() => removeFoodItem(f.id)}>✕</button>
+              </div>
             ))}
+            <div className="staged-total">
+              <span>Meal total</span>
+              <span className="staged-total-val">{Math.round(total.cal)} kcal</span>
+            </div>
           </div>
+        )}
 
-          {/* ── SEARCH MODE ── */}
-          {mode === 'search' && (
-            <>
-              {/* Search input + dropdown */}
-              {!selectedProduct && (
+        {/* ── Food picker ── */}
+        {!manual && (
+          <div className="food-builder">
+            {!selectedFood ? (
+              <>
                 <div className="search-wrap">
                   <input
                     className="field-input"
                     style={{ width: '100%' }}
                     type="text"
-                    placeholder="Search food (e.g. chicken breast, rice…)"
+                    placeholder="Search a food (e.g. chicken breast, rice…)"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     autoComplete="off"
                   />
-                  {(loading || results.length > 0) && (
+                  {results.length > 0 && (
                     <div className="search-results">
-                      {loading && (
-                        <div className="search-loading">Searching…</div>
-                      )}
-                      {!loading &&
-                        results.map((product, i) => (
-                          <div
-                            key={i}
-                            className="search-result-item"
-                            onClick={() => {
-                              setSelectedProduct(product);
-                              clearResults();
-                            }}
-                          >
-                            <span className="search-result-name">
-                              {product.name}
-                            </span>
-                            <span className="search-result-cal">
-                              {product.per100g.cal} kcal/100g
-                            </span>
-                          </div>
-                        ))}
+                      {results.map((food) => (
+                        <div
+                          key={food.id}
+                          className="search-result-item"
+                          onClick={() => pickFood(food)}
+                        >
+                          <span className="search-result-name">{food.name}</span>
+                          <span className="search-result-cal">
+                            {food.variants[0].per100g.cal} kcal/100g
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
-              )}
-
-              {/* Selected product + grams input */}
-              {selectedProduct && (
-                <>
-                  <div className="selected-product">
-                    <span className="selected-product-name">
-                      {selectedProduct.name}
-                    </span>
-                    <button
-                      className="del-btn"
-                      onClick={() => { setSelectedProduct(null); setGrams(''); }}
-                      title="Choose a different food"
-                    >
-                      ✕
+                {query.trim().length >= 2 && results.length === 0 && (
+                  <div className="picker-hint">
+                    Not in the list —{' '}
+                    <button className="link-btn" onClick={() => setManual({ ...EMPTY_MANUAL, name: query })}>
+                      enter it manually
                     </button>
                   </div>
-
-                  <div className="form-field" style={{ marginBottom: 10 }}>
-                    <div className="field-label">How many grams?</div>
-                    <input
-                      className="field-input"
-                      type="number"
-                      min="1"
-                      placeholder="e.g. 150"
-                      value={grams}
-                      onChange={(e) => setGrams(e.target.value)}
-                      autoFocus
-                    />
-                  </div>
-
-                  {/* Live macro preview */}
-                  {preview ? (
-                    <div className="macro-preview">
-                      <div className="macro-preview-cell">
-                        <div className="macro-preview-val" style={{ color: 'var(--accent)' }}>
-                          {preview.cal}
-                        </div>
-                        <div className="macro-preview-label">kcal</div>
-                      </div>
-                      <div className="macro-preview-cell">
-                        <div className="macro-preview-val" style={{ color: '#60b8ff' }}>
-                          {preview.p}g
-                        </div>
-                        <div className="macro-preview-label">protein</div>
-                      </div>
-                      <div className="macro-preview-cell">
-                        <div className="macro-preview-val" style={{ color: '#ffaa40' }}>
-                          {preview.c}g
-                        </div>
-                        <div className="macro-preview-label">carbs</div>
-                      </div>
-                      <div className="macro-preview-cell">
-                        <div className="macro-preview-val" style={{ color: '#ff6b9d' }}>
-                          {preview.f}g
-                        </div>
-                        <div className="macro-preview-label">fats</div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div
-                      style={{
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: 11,
-                        color: 'var(--text3)',
-                        textAlign: 'center',
-                        padding: '8px 0',
-                      }}
-                    >
-                      Per 100g: {selectedProduct.per100g.cal} kcal ·{' '}
-                      P {selectedProduct.per100g.p}g · C {selectedProduct.per100g.c}g ·{' '}
-                      F {selectedProduct.per100g.f}g
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* No results hint */}
-              {!loading && query.trim().length >= 2 && results.length === 0 && !selectedProduct && (
-                <div
-                  style={{
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 11,
-                    color: 'var(--text3)',
-                    textAlign: 'center',
-                    padding: '8px 0',
-                  }}
-                >
-                  No results — try manual entry
+                )}
+              </>
+            ) : (
+              <>
+                <div className="selected-product">
+                  <span className="selected-product-name">{selectedFood.name}</span>
+                  <button className="del-btn" onClick={resetPicker} title="Choose a different food">✕</button>
                 </div>
-              )}
-            </>
-          )}
 
-          {/* ── MANUAL MODE ── */}
-          {mode === 'manual' && (
+                {/* Variant pills (only when >1 exists) */}
+                {selectedFood.variants.length > 1 && (
+                  <div className="meal-type-row" style={{ marginBottom: 8 }}>
+                    {selectedFood.variants.map((v) => (
+                      <button
+                        key={v.label}
+                        className={`meal-type-btn${variant?.label === v.label ? ' active' : ''}`}
+                        onClick={() => { setVariant(v); setGrams(''); }}
+                      >
+                        {v.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="form-field" style={{ marginBottom: 10 }}>
+                  <div className="field-label">How many grams?</div>
+                  <input
+                    className="field-input"
+                    type="number"
+                    min="1"
+                    placeholder="e.g. 150"
+                    value={grams}
+                    onChange={(e) => setGrams(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+
+                {preview ? (
+                  <div className="macro-preview">
+                    <div className="macro-preview-cell">
+                      <div className="macro-preview-val" style={{ color: 'var(--accent)' }}>{preview.cal}</div>
+                      <div className="macro-preview-label">kcal</div>
+                    </div>
+                    <div className="macro-preview-cell">
+                      <div className="macro-preview-val" style={{ color: '#60b8ff' }}>{preview.p}g</div>
+                      <div className="macro-preview-label">protein</div>
+                    </div>
+                    <div className="macro-preview-cell">
+                      <div className="macro-preview-val" style={{ color: '#ffaa40' }}>{preview.c}g</div>
+                      <div className="macro-preview-label">carbs</div>
+                    </div>
+                    <div className="macro-preview-cell">
+                      <div className="macro-preview-val" style={{ color: '#ff6b9d' }}>{preview.f}g</div>
+                      <div className="macro-preview-label">fats</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="picker-hint" style={{ textAlign: 'center' }}>
+                    {variant && (
+                      <>Per 100g: {variant.per100g.cal} kcal · P {variant.per100g.p} · C {variant.per100g.c} · F {variant.per100g.f}</>
+                    )}
+                  </div>
+                )}
+
+                <button className="cta-btn secondary" style={{ marginTop: 10 }} onClick={addFoodItem}>
+                  + Add to meal
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ── Manual entry fallback ── */}
+        {manual && (
+          <div className="food-builder">
             <div className="form-grid">
               <div className="form-field full">
                 <div className="field-label">Food name</div>
@@ -295,64 +278,93 @@ export default function FoodScreen({ state, update, formRef }) {
                   type="text"
                   placeholder="e.g. Homemade adobo"
                   value={manual.name}
-                  onChange={(e) => setManual((f) => ({ ...f, name: e.target.value }))}
+                  autoFocus
+                  onChange={(e) => setManual((m) => ({ ...m, name: e.target.value }))}
                 />
+              </div>
+              <div className="form-field">
+                <div className="field-label">Grams (optional)</div>
+                <input className="field-input" type="number" min="0" placeholder="—"
+                  value={manual.grams}
+                  onChange={(e) => setManual((m) => ({ ...m, grams: e.target.value }))} />
               </div>
               <div className="form-field">
                 <div className="field-label">Calories</div>
-                <input
-                  className="field-input"
-                  type="number"
-                  min="0"
-                  placeholder="0"
+                <input className="field-input" type="number" min="0" placeholder="0"
                   value={manual.cal}
-                  onChange={(e) => setManual((f) => ({ ...f, cal: e.target.value }))}
-                />
+                  onChange={(e) => setManual((m) => ({ ...m, cal: e.target.value }))} />
               </div>
               <div className="form-field">
                 <div className="field-label">Protein (g)</div>
-                <input
-                  className="field-input"
-                  type="number"
-                  min="0"
-                  placeholder="0"
+                <input className="field-input" type="number" min="0" placeholder="0"
                   value={manual.p}
-                  onChange={(e) => setManual((f) => ({ ...f, p: e.target.value }))}
-                />
+                  onChange={(e) => setManual((m) => ({ ...m, p: e.target.value }))} />
               </div>
               <div className="form-field">
                 <div className="field-label">Carbs (g)</div>
-                <input
-                  className="field-input"
-                  type="number"
-                  min="0"
-                  placeholder="0"
+                <input className="field-input" type="number" min="0" placeholder="0"
                   value={manual.c}
-                  onChange={(e) => setManual((f) => ({ ...f, c: e.target.value }))}
-                />
+                  onChange={(e) => setManual((m) => ({ ...m, c: e.target.value }))} />
               </div>
               <div className="form-field">
                 <div className="field-label">Fats (g)</div>
-                <input
-                  className="field-input"
-                  type="number"
-                  min="0"
-                  placeholder="0"
+                <input className="field-input" type="number" min="0" placeholder="0"
                   value={manual.f}
-                  onChange={(e) => setManual((f) => ({ ...f, f: e.target.value }))}
-                />
+                  onChange={(e) => setManual((m) => ({ ...m, f: e.target.value }))} />
               </div>
             </div>
-          )}
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <button className="cta-btn secondary" style={{ flex: 1, opacity: 0.75 }}
+                onClick={() => setManual(null)}>
+                Back
+              </button>
+              <button className="cta-btn secondary" style={{ flex: 2 }} onClick={addManualItem}>
+                + Add to meal
+              </button>
+            </div>
+          </div>
+        )}
 
-          <button
-            className="cta-btn secondary"
-            onClick={addFood}
-            style={{ marginTop: 12 }}
-          >
-            + Log this food
+        {/* ── Modal actions ── */}
+        <div className="modal-actions">
+          <button className="cta-btn secondary" style={{ flex: 1 }} onClick={onClose}>
+            Cancel
+          </button>
+          <button className="cta-btn" style={{ flex: 2 }} onClick={save}>
+            Save Meal
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+export default function FoodScreen({ state, update }) {
+  const { meals, customFoods = [] } = state;
+  const { showToast } = useToast();
+  const [modalOpen, setModalOpen] = useState(false);
+
+  const totals = macroTotals(meals);
+
+  const saveMeal = (type, foods) => {
+    const meal = { ...makeMeal(type), foods };
+    update((s) => ({ ...s, meals: [...s.meals, meal] }));
+    setModalOpen(false);
+    showToast('Meal logged ✓');
+  };
+
+  const deleteMeal = (id) =>
+    update((s) => ({ ...s, meals: s.meals.filter((m) => m.id !== id) }));
+
+  return (
+    <div>
+      {/* ── Today's macro totals ── */}
+      <div className="macro-row">
+        <MacroCard val={Math.round(totals.cal)}     label="kcal"    color="var(--accent)" />
+        <MacroCard val={`${Math.round(totals.p)}g`} label="Protein" color="#60b8ff" />
+        <MacroCard val={`${Math.round(totals.c)}g`} label="Carbs"   color="#ffaa40" />
+        <MacroCard val={`${Math.round(totals.f)}g`} label="Fats"    color="#ff6b9d" />
       </div>
 
       {/* ── Today's meals ── */}
@@ -362,30 +374,51 @@ export default function FoodScreen({ state, update, formRef }) {
           <EmptyState
             icon="🍽️"
             title="No meals yet"
-            sub="Search a food or use manual entry to start tracking."
+            sub='Tap "Add meal" to log your food and auto-calculate macros.'
           />
         ) : (
-          meals.map((m) => (
-            <div className="meal-item" key={m.id}>
-              <span className="meal-icon">{m.emoji}</span>
-              <div className="meal-info">
-                <div className="meal-name">{m.name}</div>
-                <div className="meal-macros">
-                  {m.type}
-                  {m.grams ? ` · ${m.grams}g` : ''}
-                  {' · '}P:{Math.round(m.p)}g C:{Math.round(m.c)}g F:{Math.round(m.f)}g
+          meals.map((m) => {
+            const mm = mealMacros(m);
+            return (
+              <div className="meal-card" key={m.id}>
+                <div className="meal-card-head">
+                  <span className="meal-icon">{m.emoji}</span>
+                  <span className="meal-card-type">{m.type}</span>
+                  <span className="meal-card-total">{Math.round(mm.cal)} kcal</span>
+                  <button className="del-btn" onClick={() => deleteMeal(m.id)}>✕</button>
+                </div>
+                <div className="meal-card-foods">
+                  {(m.foods ?? []).map((f) => (
+                    <div className="meal-food-row" key={f.id}>
+                      <span className="meal-food-name">{f.name}</span>
+                      <span className="meal-food-sub">
+                        {f.grams ? `${f.grams}g` : ''}
+                      </span>
+                      <span className="meal-food-cal">{Math.round(f.cal)}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="meal-card-macros">
+                  P {Math.round(mm.p)}g · C {Math.round(mm.c)}g · F {Math.round(mm.f)}g
                 </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div className="meal-cal">{Math.round(m.cal)}</div>
-                <button className="del-btn" onClick={() => deleteFood(m.id)}>
-                  ✕
-                </button>
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
+
+      {/* ── Add meal button ── */}
+      <button className="add-exercise-btn" onClick={() => setModalOpen(true)}>
+        <span style={{ fontSize: 18 }}>+</span> Add meal
+      </button>
+
+      {modalOpen && (
+        <AddMealModal
+          customFoods={customFoods}
+          onClose={() => setModalOpen(false)}
+          onSave={saveMeal}
+        />
+      )}
     </div>
   );
 }

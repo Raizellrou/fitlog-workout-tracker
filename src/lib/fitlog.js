@@ -16,18 +16,27 @@ export function emptyState() {
     sessionName: 'Morning Session',
     exercises: [],
     meals: [],
+    activeDate: null,        // calendar day the working set (exercises/meals) belongs to
     history: [],
     streak: 0,
     lastWorkoutDate: null,
     muscleGroupHistory: {},  // { [group: string]: ISO date string }
     cardioSessions: [],      // CardioSession[]
+    customFoods: [],         // user-added foods, persisted across days
   };
 }
 
-/** Roll over to a fresh day: clear today's working set, keep history & streak. */
+/**
+ * Roll over to a fresh day: clear today's working set, keep history & streak.
+ *
+ * Keyed off `activeDate` (the day the working set belongs to) — NOT
+ * `lastWorkoutDate`, which only changes when a session is *finished*. Using
+ * lastWorkoutDate here meant every Firestore snapshot wiped in-progress
+ * exercises/meals until a workout was finished that day.
+ */
 export function freshDay(state) {
-  if (state.lastWorkoutDate !== TODAY) {
-    return { ...state, exercises: [], meals: [] };
+  if (state.activeDate !== TODAY) {
+    return { ...state, exercises: [], meals: [], activeDate: TODAY };
   }
   return state;
 }
@@ -68,15 +77,54 @@ export function workoutStats(exercises) {
   return { exercises: exercises.length, setsDone, volume };
 }
 
-/** Sum macros across all logged meals. */
-export function macroTotals(meals) {
-  return meals.reduce(
-    (acc, m) => ({
-      cal: acc.cal + (m.cal || 0),
-      p: acc.p + (m.p || 0),
-      c: acc.c + (m.c || 0),
-      f: acc.f + (m.f || 0),
+/** Scale per-100g macros to an actual gram amount. */
+export function scaleMacros(per100g, grams) {
+  const g = Number(grams) || 0;
+  return {
+    cal: Math.round((per100g.cal * g) / 100),
+    p: Math.round(((per100g.p * g) / 100) * 10) / 10,
+    c: Math.round(((per100g.c * g) / 100) * 10) / 10,
+    f: Math.round(((per100g.f * g) / 100) * 10) / 10,
+  };
+}
+
+/** A meal is a container; each food item carries its own resolved macros. */
+export function makeMeal(type) {
+  return {
+    id: crypto.randomUUID(),
+    type,
+    emoji: MEAL_EMOJIS[type],
+    loggedAt: Date.now(),
+    foods: [],
+  };
+}
+
+/** Sum macros for a single meal's food items. */
+export function mealMacros(meal) {
+  const items = meal?.foods ?? [];
+  return items.reduce(
+    (acc, item) => ({
+      cal: acc.cal + (item.cal || 0),
+      p: acc.p + (item.p || 0),
+      c: acc.c + (item.c || 0),
+      f: acc.f + (item.f || 0),
     }),
+    { cal: 0, p: 0, c: 0, f: 0 }
+  );
+}
+
+/** Sum macros across every meal (and every food within each meal) for the day. */
+export function macroTotals(meals) {
+  return (meals ?? []).reduce(
+    (acc, m) => {
+      const mm = mealMacros(m);
+      return {
+        cal: acc.cal + mm.cal,
+        p: acc.p + mm.p,
+        c: acc.c + mm.c,
+        f: acc.f + mm.f,
+      };
+    },
     { cal: 0, p: 0, c: 0, f: 0 }
   );
 }

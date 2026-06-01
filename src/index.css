@@ -11,6 +11,8 @@
   --color-bg4: #242428;
   --color-accent: #c8ff00;
   --color-accent2: #a8d900;
+  --color-secondary: #bda7ff;
+  --color-secondary2: #a384ff;
   --color-red: #ff4d4d;
   --color-muted: #555560;
   --color-muted2: #35353d;
@@ -32,6 +34,10 @@
   --bg4: #242428;
   --accent: #c8ff00;
   --accent2: #a8d900;
+  --secondary: #bda7ff;
+  --secondary2: #a384ff;
+  --secondary-soft: rgba(189, 167, 255, 0.12);
+  --secondary-border: rgba(189, 167, 255, 0.3);
   --red: #ff4d4d;
   --muted: #555560;
   --muted2: #35353d;
@@ -42,6 +48,8 @@
   --border2: rgba(255, 255, 255, 0.12);
   --radius: 14px;
   --radius-sm: 8px;
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.28);
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
   --font-display: 'Bebas Neue', sans-serif;
   --font-body: 'DM Sans', sans-serif;
   --font-mono: 'DM Mono', monospace;
@@ -130,7 +138,11 @@ body {
   font-size: 42px;
   letter-spacing: 0.02em;
   line-height: 1;
-  color: var(--text);
+  color: var(--accent);
+  background: linear-gradient(110deg, var(--accent) 35%, var(--secondary) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
   padding-bottom: 4px;
 }
 
@@ -163,8 +175,8 @@ body {
   font-weight: 500;
 }
 .tab:not(.active):hover {
-  border-color: var(--border2);
-  color: var(--text2);
+  border-color: var(--secondary-border);
+  color: var(--secondary);
 }
 
 /* ── SCROLL CONTENT ── */
@@ -191,6 +203,7 @@ body {
   border-radius: var(--radius);
   padding: 14px 12px;
   text-align: center;
+  box-shadow: var(--shadow-sm);
 }
 .stat-val {
   font-family: var(--font-display);
@@ -274,6 +287,7 @@ body {
   border-radius: var(--radius);
   margin-bottom: 10px;
   overflow: hidden;
+  box-shadow: var(--shadow-sm);
   animation: slideIn 0.2s ease;
 }
 @keyframes slideIn {
@@ -376,6 +390,7 @@ body {
 }
 .set-input:focus {
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(200, 255, 0, 0.1);
 }
 .set-input.done {
   background: rgba(200, 255, 0, 0.08);
@@ -425,8 +440,8 @@ body {
   transition: all 0.15s;
 }
 .add-set-btn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--secondary);
+  color: var(--secondary);
 }
 
 /* ── EMPTY STATE ── */
@@ -473,8 +488,9 @@ body {
   transition: all 0.18s;
 }
 .add-exercise-btn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--secondary);
+  color: var(--secondary);
+  background: var(--secondary-soft);
 }
 
 /* ── FOOD SCREEN ── */
@@ -501,6 +517,7 @@ body {
   border-radius: var(--radius);
   padding: 12px 10px;
   text-align: center;
+  box-shadow: var(--shadow-sm);
 }
 .macro-val {
   font-family: var(--font-display);
@@ -556,6 +573,162 @@ body {
   flex-shrink: 0;
 }
 
+/* ── MEAL CARD (container of food items) ── */
+.meal-card {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  box-shadow: var(--shadow-sm);
+  animation: slideIn 0.2s ease;
+}
+.meal-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.meal-card-type {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.01em;
+}
+.meal-card-total {
+  font-family: var(--font-display);
+  font-size: 20px;
+  color: var(--accent);
+  line-height: 1;
+}
+.meal-card-foods {
+  padding: 8px 0 4px;
+}
+.meal-food-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+}
+.meal-food-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.meal-food-sub {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text3);
+  flex-shrink: 0;
+}
+.meal-food-cal {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+  flex-shrink: 0;
+  min-width: 38px;
+  text-align: right;
+}
+.meal-card-macros {
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--text3);
+}
+
+/* ── ADD MEAL MODAL: staged foods + builder ── */
+.staged-foods {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  margin-bottom: 14px;
+}
+.staged-food-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.staged-food-row:last-of-type {
+  border-bottom: none;
+}
+.staged-food-main {
+  flex: 1;
+  min-width: 0;
+}
+.staged-food-name {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.staged-food-sub {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text3);
+}
+.staged-food-cal {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.staged-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0 6px;
+  border-top: 1px solid var(--border2);
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text3);
+}
+.staged-total-val {
+  font-family: var(--font-display);
+  font-size: 20px;
+  color: var(--accent);
+  letter-spacing: 0.02em;
+}
+.food-builder {
+  background: var(--bg3);
+  border: 1px dashed var(--muted2);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 6px;
+}
+.picker-hint {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text3);
+  padding: 8px 2px 0;
+}
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--secondary);
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
 /* ── ADD FOOD FORM ── */
 .add-food-form {
   background: var(--bg3);
@@ -603,6 +776,7 @@ body {
 }
 .field-input:focus {
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(200, 255, 0, 0.1);
 }
 .field-input::placeholder {
   color: var(--text3);
@@ -627,8 +801,8 @@ body {
   transition: all 0.15s;
 }
 .meal-type-btn.active {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--secondary);
+  border-color: var(--secondary);
   color: #0d0d0f;
 }
 
@@ -644,7 +818,7 @@ body {
 .cta-btn {
   width: 100%;
   padding: 15px;
-  background: var(--accent);
+  background: linear-gradient(180deg, #d6ff3a 0%, var(--accent) 65%);
   color: #0d0d0f;
   border: none;
   border-radius: var(--radius);
@@ -652,21 +826,37 @@ body {
   font-size: 20px;
   letter-spacing: 0.04em;
   cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 6px 18px rgba(200, 255, 0, 0.18);
   transition:
-    background 0.15s,
+    filter 0.15s,
+    box-shadow 0.15s,
     transform 0.1s;
 }
 .cta-btn:hover {
-  background: var(--accent2);
+  filter: brightness(1.05);
+  box-shadow: 0 8px 22px rgba(200, 255, 0, 0.26);
 }
 .cta-btn:active {
   transform: scale(0.98);
 }
+.cta-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+  box-shadow: none;
+}
 .cta-btn.secondary {
-  background: var(--bg3);
-  color: var(--text);
-  border: 1px solid var(--border);
+  background: var(--secondary-soft);
+  color: var(--secondary);
+  border: 1px solid var(--secondary-border);
   font-size: 16px;
+  box-shadow: none;
+}
+.cta-btn.secondary:hover {
+  filter: none;
+  background: rgba(189, 167, 255, 0.2);
+  border-color: var(--secondary);
+  box-shadow: 0 6px 18px rgba(163, 132, 255, 0.16);
 }
 
 /* ── TOAST ── */
@@ -698,7 +888,9 @@ body {
   display: none;
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
   z-index: 200;
   align-items: flex-end;
   justify-content: center;
@@ -713,6 +905,7 @@ body {
   padding: 20px 20px calc(20px + var(--safe-bottom));
   width: 100%;
   max-width: 480px;
+  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.5);
   animation: slideUp 0.25s ease;
 }
 @keyframes slideUp {
@@ -723,11 +916,44 @@ body {
     transform: translateY(0);
   }
 }
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
 .modal-title {
   font-family: var(--font-display);
   font-size: 28px;
   margin-bottom: 16px;
   letter-spacing: 0.02em;
+  color: var(--accent);
+  background: linear-gradient(110deg, var(--accent) 35%, var(--secondary) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.modal-header .modal-title {
+  margin-bottom: 0;
+}
+.modal-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--bg4);
+  border: 1px solid var(--border);
+  color: var(--text2);
+  cursor: pointer;
+  font-size: 15px;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.modal-close:hover {
+  color: var(--text);
+  border-color: var(--border2);
 }
 .modal-text {
   font-size: 13px;
@@ -753,6 +979,7 @@ body {
   border-radius: var(--radius);
   padding: 14px;
   margin-bottom: 8px;
+  box-shadow: var(--shadow-sm);
 }
 .history-header {
   display: flex;
@@ -837,6 +1064,10 @@ body {
   font-family: var(--font-display);
   font-size: 64px;
   color: var(--accent);
+  background: linear-gradient(110deg, var(--accent) 40%, var(--secondary) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
   line-height: 1;
 }
 .auth-sub {
@@ -1009,8 +1240,8 @@ body {
   letter-spacing: 0.04em;
 }
 .selected-product {
-  background: rgba(200, 255, 0, 0.06);
-  border: 1px solid rgba(200, 255, 0, 0.2);
+  background: var(--secondary-soft);
+  border: 1px solid var(--secondary-border);
   border-radius: var(--radius-sm);
   padding: 10px 12px;
   margin-bottom: 10px;
@@ -1022,7 +1253,7 @@ body {
 .selected-product-name {
   font-size: 13px;
   font-weight: 500;
-  color: var(--accent);
+  color: var(--secondary);
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -1077,8 +1308,8 @@ body {
   transition: all 0.15s;
 }
 .cardio-type-btn.active {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--secondary);
+  border-color: var(--secondary);
   color: #0d0d0f;
 }
 .cardio-preview {
@@ -1115,6 +1346,7 @@ body {
   border-radius: var(--radius);
   padding: 12px 14px;
   margin-bottom: 8px;
+  box-shadow: var(--shadow-sm);
   animation: slideIn 0.2s ease;
 }
 .cardio-item-header {
