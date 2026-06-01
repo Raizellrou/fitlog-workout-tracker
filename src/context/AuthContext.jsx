@@ -1,11 +1,12 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import {
   onAuthStateChanged,
-  signInWithRedirect,
-  getRedirectResult,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
   signOut as fbSignOut,
+  updateProfile,
 } from 'firebase/auth';
-import { auth, googleProvider } from '@/firebase';
+import { auth } from '@/firebase';
 
 const AuthContext = createContext(null);
 
@@ -14,18 +15,23 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Handle the redirect result when the user returns from Google sign-in.
-    getRedirectResult(auth).catch(() => {});
-
     return onAuthStateChanged(auth, (u) => {
       setUser(u);
       setLoading(false);
     });
   }, []);
 
-  // Uses redirect instead of popup — avoids ERR_CONNECTION_RESET on
-  // networks that block firebaseapp.com (common with some PH ISPs).
-  const signInWithGoogle = () => signInWithRedirect(auth, googleProvider);
+  const signUp = async (email, password, displayName) => {
+    const cred = await createUserWithEmailAndPassword(auth, email, password);
+    if (displayName) {
+      await updateProfile(cred.user, { displayName });
+    }
+    return cred;
+  };
+
+  const signIn = (email, password) =>
+    signInWithEmailAndPassword(auth, email, password);
+
   const signOut = () => fbSignOut(auth);
 
   return (
@@ -34,7 +40,8 @@ export function AuthProvider({ children }) {
         user,
         loading,
         isAuthenticated: !!user,
-        signInWithGoogle,
+        signUp,
+        signIn,
         signOut,
       }}
     >

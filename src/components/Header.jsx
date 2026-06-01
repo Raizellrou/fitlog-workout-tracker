@@ -18,7 +18,8 @@ function LogoutIcon() {
 }
 
 export default function Header({ tab }) {
-  const { isAuthenticated, signOut } = useAuth();
+  const { isAuthenticated, user, signOut } = useAuth();
+  const label = user?.displayName || user?.email || 'Account';
   return (
     <div className="header">
       <div className="header-top">
@@ -29,7 +30,7 @@ export default function Header({ tab }) {
             <button
               className="icon-btn"
               onClick={signOut}
-              title="Sign out"
+              title={`Sign out (${label})`}
               aria-label="Sign out"
             >
               <LogoutIcon />
