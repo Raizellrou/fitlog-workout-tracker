@@ -11,7 +11,7 @@ Tracking doc for making every tab fully functional. Check items off as they land
 | Topic | Decision |
 |---|---|
 | Bottom nav | Fixed floating glass bar, pinned on all devices; content scrolls under it |
-| Testing | Throwaway live account created on the real Firebase project (email `qa@fitlog.app` / pw `FitLog2026!`) — delete when done |
+| Testing | Throwaway live account on the real Firebase project (credentials shared privately, kept out of the repo — rotate/delete when done) |
 | Score | "Gains Score" → **Consistency Score** (objective, derived from workout consistency) |
 | Calorie/macro goal | **Jacob Oestreicher model** — protein is the anchor (0.8–1.0 g/lb bodyweight, adjustable), lean bulk is a small FLAT surplus (not %). Calories = Mifflin–St Jeor TDEE + flat goal delta; fat ~0.9 g/kg; carbs fill the rest |
 | Goal types (flat kcal) | Lean Bulk +150 · Bulk +350 · Maintain 0 · Cut −500 |
@@ -134,6 +134,6 @@ Audit summary — **already solid:** Firestore rules scope read/write to the own
 
 ## Open questions / blockers
 
-- ✅ ~~Testing creds~~ — throwaway account created (`qa@fitlog.app` / `FitLog2026!`); real auth + sync verified.
+- ✅ ~~Testing creds~~ — throwaway account created (credentials shared privately, not committed); real auth + sync verified.
 - ❓ Consistency Score weighting (Phase 4) — what should matter most?
 - ❓ Security: should I start with **Tier 1** quick wins now (rules validation + headers + firebase.json)? App Check (Tier 2) needs a reCAPTCHA key from your Firebase console.
