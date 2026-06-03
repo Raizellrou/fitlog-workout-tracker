@@ -29,3 +29,8 @@ desktop.ini
 # Python (icon tooling)
 __pycache__/
 *.pyc
+
+# Claude Code tooling (local agent/skill files — not app code)
+.claude/
+.agents/
+skills-lock.json

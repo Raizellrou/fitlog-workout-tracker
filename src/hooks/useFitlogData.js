@@ -11,7 +11,9 @@ function readCache() {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
-    return freshDay(JSON.parse(raw));
+    // Merge over emptyState() so docs cached before a new field was added
+    // still get sane defaults for that field (e.g. profile, goal, weightLog).
+    return freshDay({ ...emptyState(), ...JSON.parse(raw) });
   } catch {
     return null;
   }

@@ -10,6 +10,76 @@ export const MEAL_EMOJIS = {
 
 export const MEAL_TYPES = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
 
+// ── PROFILE / BODY METRICS ──
+export const SEX_OPTIONS = ['male', 'female'];
+
+/** Activity multipliers for TDEE (used by the Phase 2 macro engine). */
+export const ACTIVITY_LEVELS = [
+  { id: 'sedentary', label: 'Sedentary', sub: 'Little or no exercise', factor: 1.2 },
+  { id: 'light', label: 'Light', sub: '1–3 days / week', factor: 1.375 },
+  { id: 'moderate', label: 'Moderate', sub: '3–5 days / week', factor: 1.55 },
+  { id: 'active', label: 'Active', sub: '6–7 days / week', factor: 1.725 },
+  { id: 'very_active', label: 'Athlete', sub: 'Hard daily training', factor: 1.9 },
+];
+
+/** Blank profile for a new user (metrics unset until they fill them in). */
+export function emptyProfile() {
+  return { sex: 'male', age: null, heightCm: null, weightKg: null, activityLevel: 'moderate' };
+}
+
+/** True once the core metrics needed for TDEE / macros are present. */
+export function profileComplete(p) {
+  return !!(p && p.age > 0 && p.heightCm > 0 && p.weightKg > 0);
+}
+
+// ── NUTRITION TARGETS (goal-driven macros) ──
+// Approach follows Jacob Oestreicher: PROTEIN is the anchor (0.8–1.0 g per lb of
+// bodyweight) and a lean bulk is a small FLAT surplus (~+150 kcal), not a % of
+// TDEE. Fat is set ~0.9 g/kg and carbs fill whatever calories remain.
+const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
+
+export const LB_PER_KG = 2.20462;
+export const PROTEIN_PER_LB_MIN = 0.8;
+export const PROTEIN_PER_LB_MAX = 1.0;
+
+export const GOAL_TYPES = [
+  { id: 'lean_bulk', label: 'Lean Bulk', sub: 'Slow, lean gains', kcalDelta: 150 },
+  { id: 'bulk', label: 'Bulk', sub: 'Faster muscle gain', kcalDelta: 350 },
+  { id: 'maintain', label: 'Maintain', sub: 'Hold weight / recomp', kcalDelta: 0 },
+  { id: 'cut', label: 'Cut', sub: 'Lose fat, keep muscle', kcalDelta: -500 },
+];
+
+export function emptyGoal() {
+  return { type: 'lean_bulk', targetWeightKg: null, proteinPerLb: 1.0 };
+}
+
+/** Mifflin–St Jeor basal metabolic rate (kcal/day). */
+export function bmrMifflin({ sex, age, heightCm, weightKg }) {
+  const base = 10 * weightKg + 6.25 * heightCm - 5 * age;
+  return sex === 'female' ? base - 161 : base + 5;
+}
+
+/**
+ * Goal-driven daily calorie + macro targets — or null if the profile is incomplete.
+ * Protein is the anchor (0.8–1.0 g/lb, Jacob Oestreicher); fat ~0.9 g/kg; carbs fill the rest.
+ * @returns {{ tdee, calories, protein, carbs, fat, proteinPerLb } | null}
+ */
+export function computeNutritionTargets(profile, goal) {
+  if (!profileComplete(profile)) return null;
+  const activity =
+    ACTIVITY_LEVELS.find((a) => a.id === profile.activityLevel) ?? ACTIVITY_LEVELS[2];
+  const tdee = bmrMifflin(profile) * activity.factor;
+  const goalDef = GOAL_TYPES.find((g) => g.id === goal?.type) ?? GOAL_TYPES[0];
+  const calories = Math.max(1000, Math.round(tdee + goalDef.kcalDelta));
+
+  const perLb = clamp(goal?.proteinPerLb ?? 1.0, PROTEIN_PER_LB_MIN, PROTEIN_PER_LB_MAX);
+  const protein = Math.round(profile.weightKg * LB_PER_KG * perLb); // the anchor
+  const fat = Math.round(profile.weightKg * 0.9);
+  const carbs = Math.max(0, Math.round((calories - protein * 4 - fat * 9) / 4));
+
+  return { tdee: Math.round(tdee), calories, protein, carbs, fat, proteinPerLb: perLb };
+}
+
 /** Default empty state for a brand-new user / day. */
 export function emptyState() {
   return {
@@ -23,6 +93,8 @@ export function emptyState() {
     muscleGroupHistory: {},  // { [group: string]: ISO date string }
     cardioSessions: [],      // CardioSession[]
     customFoods: [],         // user-added foods, persisted across days
+    profile: emptyProfile(), // body metrics (sex / age / height / weight / activity)
+    goal: emptyGoal(),       // { type, targetWeightKg, proteinPerLb } → drives macro targets
   };
 }
 
@@ -243,4 +315,60 @@ export function weeklyCardioStats(cardioSessions = []) {
     .filter((c) => c.pace > 0)
     .reduce((best, c) => (best === 0 || c.pace < best ? c.pace : best), 0);
   return { totalKm, sessions: thisWeek.length, bestPace };
+}
+
+// ─────────────────────────────────────────────
+// ── DASHBOARD / STREAK HELPERS ──
+// ─────────────────────────────────────────────
+
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+/** ISO date (YYYY-MM-DD) for a Date offset by deltaDays. */
+function isoOffset(base, deltaDays) {
+  const d = new Date(base);
+  d.setDate(d.getDate() + deltaDays);
+  return d.toISOString().split('T')[0];
+}
+
+/**
+ * Mon–Sun of the current week, each tagged 'done' | 'today' | 'empty'
+ * based on which days have a workout in history.
+ */
+export function weekGrid(history = [], todayIso = TODAY) {
+  const today = new Date(todayIso + 'T00:00:00');
+  const jsDay = today.getDay(); // 0=Sun … 6=Sat
+  const mondayDelta = jsDay === 0 ? -6 : 1 - jsDay;
+  const workoutDates = new Set(history.map((h) => h.date));
+  return WEEKDAYS.map((day, i) => {
+    const iso = isoOffset(today, mondayDelta + i);
+    let state = 'empty';
+    if (workoutDates.has(iso)) state = 'done';
+    else if (iso === todayIso) state = 'today';
+    return { day, iso, state };
+  });
+}
+
+/** Count distinct workout days within the last `n` days (today inclusive). */
+export function activeDays(history = [], n = 7, todayIso = TODAY) {
+  const cutoff = isoOffset(new Date(todayIso + 'T00:00:00'), -(n - 1));
+  return new Set(history.filter((h) => h.date >= cutoff).map((h) => h.date)).size;
+}
+
+/** Most recent workout date in history, or null. */
+export function lastWorkoutIso(history = []) {
+  return history.reduce((latest, h) => (!latest || h.date > latest ? h.date : latest), null);
+}
+
+/** Macro split expressed as % of total calories. */
+export function macroPercents({ p = 0, c = 0, f = 0 } = {}) {
+  const pc = p * 4;
+  const cc = c * 4;
+  const fc = f * 9;
+  const tot = pc + cc + fc;
+  if (!tot) return { p: 0, c: 0, f: 0 };
+  return {
+    p: Math.round((pc / tot) * 100),
+    c: Math.round((cc / tot) * 100),
+    f: Math.round((fc / tot) * 100),
+  };
 }
