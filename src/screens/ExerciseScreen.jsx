@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
-  Dumbbell, ChevronDown, Check, Plus, Trash2, Footprints, Activity,
+  Dumbbell, ChevronDown, Check, Plus, Trash2, Footprints, Activity, Timer,
 } from 'lucide-react';
 import AppScreen from '@/components/ui/AppScreen';
 import TopBar from '@/components/ui/TopBar';
@@ -9,6 +9,7 @@ import GradientButton from '@/components/ui/GradientButton';
 import BottomSheet from '@/components/ui/BottomSheet';
 import DayStreakCell from '@/components/ui/DayStreakCell';
 import { useToast } from '@/context/ToastContext';
+import { timerLabel } from '@/lib/format';
 import {
   makeExercise, makeSet, MUSCLE_GROUPS, detectMuscleGroup,
   extractMuscleGroups, nextStreak, weekGrid,
@@ -191,6 +192,35 @@ export default function ExerciseScreen({ state, update, today }) {
   const [cardioOpen, setCardioOpen] = useState(false);
   const [showCardio, setShowCardio] = useState(false);
 
+  // ── Workout duration timer ─────────────────────────────────────────────────
+  // Persisted in sessionStorage so it survives tab switches within the same page load.
+  const [startedAt, setStartedAt] = useState(() => {
+    if (exercises.length === 0) return null;
+    const saved = sessionStorage.getItem('fitlog_workout_start');
+    if (saved) return parseInt(saved, 10);
+    const t = Date.now();
+    sessionStorage.setItem('fitlog_workout_start', String(t));
+    return t;
+  });
+  const [elapsed, setElapsed] = useState(0);
+
+  // Auto-start on first exercise added
+  useEffect(() => {
+    if (exercises.length > 0 && startedAt === null) {
+      const t = Date.now();
+      sessionStorage.setItem('fitlog_workout_start', String(t));
+      setStartedAt(t);
+    }
+  }, [exercises.length, startedAt]);
+
+  // Live 1-second tick
+  useEffect(() => {
+    if (!startedAt) return;
+    setElapsed(Date.now() - startedAt);
+    const id = setInterval(() => setElapsed(Date.now() - startedAt), 1000);
+    return () => clearInterval(id);
+  }, [startedAt]);
+
   const grid = weekGrid(state.history, today);
 
   // Group exercises by muscle group (preserve insertion order)
@@ -231,12 +261,13 @@ export default function ExerciseScreen({ state, update, today }) {
     const name = (state.sessionName || '').trim() || 'Workout';
     const muscleGroups = extractMuscleGroups(exercises);
     const mgUpdates = Object.fromEntries(muscleGroups.map((g) => [g, today]));
+    const duration = startedAt ? Date.now() - startedAt : 0;
     const session = {
       id: crypto.randomUUID(),
       date: today,
       name,
       exercises: structuredClone(exercises),
-      duration: 0, // TODO: wire real data (session timer)
+      duration,
       muscleGroups,
     };
     update((s) => ({
@@ -247,6 +278,10 @@ export default function ExerciseScreen({ state, update, today }) {
       exercises: [],
       muscleGroupHistory: { ...(s.muscleGroupHistory ?? {}), ...mgUpdates },
     }));
+    // Reset timer
+    sessionStorage.removeItem('fitlog_workout_start');
+    setStartedAt(null);
+    setElapsed(0);
     showToast(`Workout logged 🔥 ${nextStreak(state)} day streak`);
   };
 
@@ -266,7 +301,15 @@ export default function ExerciseScreen({ state, update, today }) {
         </Card>
 
         {/* Today's workout */}
-        <h2 className="text-[18px] font-semibold text-ink mb-3">Today&apos;s Workout</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-[18px] font-semibold text-ink">Today&apos;s Workout</h2>
+          {startedAt && (
+            <span className="flex items-center gap-1.5 text-sm font-medium text-accent-light tnum">
+              <Timer className="w-4 h-4" strokeWidth={2} />
+              {timerLabel(elapsed)}
+            </span>
+          )}
+        </div>
 
         {groups.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-white/10 py-8 text-center mb-3">

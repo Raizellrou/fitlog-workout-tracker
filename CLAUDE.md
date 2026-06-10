@@ -44,7 +44,7 @@ Copy `.env.example` → `.env` and fill in Firebase web config. All `VITE_FIREBA
 |---|---|
 | `users/{uid}/data/fitlog` | Single doc — entire app state (see `emptyState()` in `lib/fitlog.js`) |
 
-Security rules in `firestore.rules`: user may only read/write their own `users/{uid}` subtree.
+Security rules in `firestore.rules`: email-verified owner only, field allow-list, scalar type checks, array size caps. Deploy with `firebase deploy --only firestore:rules`.
 
 ### State shape
 
@@ -54,14 +54,17 @@ Security rules in `firestore.rules`: user may only read/write their own `users/{
   exercises: Exercise[],       // working set — cleared daily
   meals: Meal[],               // working set — cleared daily
   activeDate: ISO | null,      // day the working set belongs to
-  history: Session[],          // persisted workout history
+  history: Session[],          // persisted workout history (capped ≤500 on Firestore write)
   streak: number,
   lastWorkoutDate: ISO | null,
   muscleGroupHistory: { [group]: ISO },
-  cardioSessions: CardioSession[],
+  cardioSessions: CardioSession[],  // capped ≤500 on Firestore write
   customFoods: Food[],         // user-defined, persisted across days
   profile: { sex, age, heightCm, weightKg, activityLevel },  // body metrics
   goal: { type, targetWeightKg, proteinPerLb },              // drives macro targets
+  weightLog: [{ id, date, kg }],    // body-weight entries (capped ≤365 on Firestore write)
+  units: 'metric' | 'imperial',     // display preference — storage always metric
+  notificationsEnabled: boolean,     // true after Notification permission granted + toggled on
 }
 ```
 
@@ -77,17 +80,18 @@ src/
 ├── firebase.js                # Firebase init + env validation
 ├── index.css                  # Tailwind v4 @theme tokens + global styles
 ├── context/
-│   ├── AuthContext.jsx         # Email/password auth (signIn, signUp, signOut)
+│   ├── AuthContext.jsx         # Email/password auth (signIn, signUp, signOut, deleteAccount, reloadUser)
 │   └── ToastContext.jsx        # Global showToast()
 ├── hooks/
-│   ├── useFitlogData.js        # Firestore sync + localStorage cache (SoT)
+│   ├── useFitlogData.js        # Firestore sync + localStorage cache (SoT) + trimForFirestore()
 │   └── useFoodSearch.js        # Searches local FOODS + customFoods by substring
 ├── lib/
-│   ├── fitlog.js               # Pure domain logic: factories, stats, streak, recovery
+│   ├── fitlog.js               # Pure domain logic: factories, stats, streak, recovery, consistencyScore
 │   ├── foodData.js             # Static USDA-seeded food table (~80 foods + variants)
-│   └── format.js               # Date/number formatting helpers
+│   └── format.js               # Date/number formatting + unit conversion helpers (kgToLb, cmToFtIn, …)
 ├── components/
-│   ├── SignIn.jsx              # Email/password sign-in + sign-up form
+│   ├── SignIn.jsx              # Email/password sign-in + sign-up form (generic error messages)
+│   ├── EmailVerification.jsx   # Post-sign-up email verification gate (resend + reload)
 │   └── ui/                    # 16 shared design-system primitives (see below)
 └── screens/
     ├── DashboardScreen.jsx     # Hero card, Consistency Score, intake, notices
@@ -168,6 +172,10 @@ Consumers: Dashboard intake card + weight-to-goal notice, Nutrition `ArcGauge`, 
 | `bmrMifflin(profile)` | Mifflin–St Jeor basal metabolic rate |
 | `emptyProfile()` / `emptyGoal()` | Factory defaults for `profile` / `goal` |
 | `profileComplete(p)` | True once age/height/weight are set |
+| `consistencyScore(state)` | Balanced 0–100 score: frequency 50%, streak 25%, recovery 15%, cardio 10% |
+| `consistencyTrend(state, weeks)` | Per-week frequency scores (oldest → newest), last entry = live full score |
+| `latestWeightEntry(weightLog)` | Most recent `{ id, date, kg }` entry, or `null` |
+| `weightDelta(weightLog)` | kg diff between the two most recent entries, or `null` |
 
 ## Key Conventions
 
@@ -176,11 +184,16 @@ Consumers: Dashboard intake card + weight-to-goal notice, Nutrition `ArcGauge`, 
 - Use `crypto.randomUUID()` for all IDs.
 - Keep `lib/fitlog.js` and `lib/foodData.js` pure (no React, no Firebase imports).
 - Cardio is a sub-section inside the Exercise tab — there is no dedicated Cardio screen.
-- Profile, goals, calorie/macro targets, and the weight-to-goal notice are **real** (Phases 1–2). Still mocked: the **Consistency Score** (`88`), the Settings body-weight history row, and the Dark Mode / Notifications / Units toggles — all marked `// TODO`.
+- **All data is real** — nothing is mocked. Every number on the Dashboard, Nutrition, and Exercise screens is driven by actual logged data. The Consistency Score, weight trend, macro targets, workout timer, and notifications are all live.
+- Storage is always metric (kg / cm). Imperial display is a view-only conversion controlled by `state.units`.
+- `useFitlogData` trims arrays before Firestore writes (`trimForFirestore`) to stay within the 1 MiB doc limit.
+- Email verification is required — unverified users see `EmailVerification.jsx` and are blocked by Firestore rules.
 
 ## Build roadmap
 
-`PROGRESS.md` (repo root) tracks the phased work to make every tab functional. Done: Phase 0 (sticky nav + Consistency Score rename), Phase 1 (Profile), Phase 2 (Goals + macro engine). Pending: Phase 3 body-weight log · Phase 4 Consistency Score formula · Phase 5 extras (units, custom food, notifications, timer) · Phase 6 security hardening. Update it as phases land.
+`PROGRESS.md` (repo root) tracks the phased build. **All phases complete (0–6):** sticky nav, profile, goals + macro engine, body-weight log, Consistency Score, extras (units, custom food, notifications, workout timer), and security hardening (Firestore rules, email verification, security headers, account deletion, data export, doc-size trimming).
+
+Remaining ops items (not blocking): Firebase App Check (needs Console access), dependency hygiene (Dependabot), billing budgets.
 
 `preview.html` + `src/preview/` are a **dev-only** UI harness (mock data, no Firebase/auth) for fast visual iteration — not shipped by the production build.
 

@@ -28,6 +28,21 @@ function writeCache(state) {
 }
 
 /**
+ * Trim unbounded arrays before writing to Firestore to stay well under the
+ * 1 MiB document limit and satisfy the Firestore rules size guards.
+ * Keeps the most-recent entries (history / cardioSessions are newest-first;
+ * weightLog is oldest-first so we take the last 365).
+ */
+function trimForFirestore(s) {
+  return {
+    ...s,
+    history:        (s.history        ?? []).slice(0, 500),
+    cardioSessions: (s.cardioSessions  ?? []).slice(0, 500),
+    weightLog:      (s.weightLog       ?? []).slice(-365),
+  };
+}
+
+/**
  * Single source of truth for all FitLog data.
  *
  * - Paints instantly from the localStorage cache.
@@ -76,7 +91,7 @@ export function useFitlogData(uid) {
           typeof updater === 'function' ? updater(prev) : { ...prev, ...updater };
         writeCache(next);
         if (uid) {
-          setDoc(doc(db, 'users', uid, 'data', 'fitlog'), next).catch(() => {});
+          setDoc(doc(db, 'users', uid, 'data', 'fitlog'), trimForFirestore(next)).catch(() => {});
         }
         return next;
       });

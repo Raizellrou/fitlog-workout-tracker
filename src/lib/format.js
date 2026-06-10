@@ -57,3 +57,35 @@ export function yesterdayISO() {
   y.setDate(y.getDate() - 1);
   return y.toISOString().split('T')[0];
 }
+
+// ── Unit conversion helpers ───────────────────────────────────────────────────
+// Internal storage is always metric (kg, cm). These helpers only affect display
+// and user input. Use lbToKg / inToCm when converting input back before saving.
+
+/** kg → lb, 1 decimal place. */
+export function kgToLb(kg) {
+  return Math.round(kg * 2.20462 * 10) / 10;
+}
+
+/** lb → kg, 2 decimal places. */
+export function lbToKg(lb) {
+  return Math.round((lb / 2.20462) * 100) / 100;
+}
+
+/** cm → whole inches (for input fields). */
+export function cmToIn(cm) {
+  return Math.round(cm / 2.54);
+}
+
+/** inches → cm, 1 decimal place. */
+export function inToCm(inches) {
+  return Math.round((inches * 2.54) * 10) / 10;
+}
+
+/** cm → "5'11"" display string. */
+export function cmToFtIn(cm) {
+  const totalIn = cm / 2.54;
+  const ft = Math.floor(totalIn / 12);
+  const inch = Math.round(totalIn % 12);
+  return `${ft}'${inch}"`;
+}

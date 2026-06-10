@@ -95,7 +95,26 @@ export function emptyState() {
     customFoods: [],         // user-added foods, persisted across days
     profile: emptyProfile(), // body metrics (sex / age / height / weight / activity)
     goal: emptyGoal(),       // { type, targetWeightKg, proteinPerLb } → drives macro targets
+    weightLog: [],           // [{ id, date: ISO, kg }] — append-only, newest entry feeds profile
+    units: 'metric',         // 'metric' | 'imperial' — display preference (storage always metric)
+    notificationsEnabled: false, // true once the user grants browser Notification permission
   };
+}
+
+/** Most recent weight log entry sorted by date, or null. */
+export function latestWeightEntry(weightLog = []) {
+  if (!weightLog?.length) return null;
+  return [...weightLog].sort((a, b) => b.date.localeCompare(a.date))[0];
+}
+
+/**
+ * kg delta between the two most recent entries (positive = gained, negative = lost).
+ * Returns null if fewer than two entries.
+ */
+export function weightDelta(weightLog = []) {
+  if (!weightLog?.length || weightLog.length < 2) return null;
+  const sorted = [...weightLog].sort((a, b) => b.date.localeCompare(a.date));
+  return Math.round((sorted[0].kg - sorted[1].kg) * 10) / 10;
 }
 
 /**
@@ -324,7 +343,7 @@ export function weeklyCardioStats(cardioSessions = []) {
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 /** ISO date (YYYY-MM-DD) for a Date offset by deltaDays. */
-function isoOffset(base, deltaDays) {
+export function isoOffset(base, deltaDays) {
   const d = new Date(base);
   d.setDate(d.getDate() + deltaDays);
   return d.toISOString().split('T')[0];
@@ -371,4 +390,88 @@ export function macroPercents({ p = 0, c = 0, f = 0 } = {}) {
     c: Math.round((cc / tot) * 100),
     f: Math.round((fc / tot) * 100),
   };
+}
+
+// ─────────────────────────────────────────────
+// ── CONSISTENCY SCORE ──
+// ─────────────────────────────────────────────
+
+/** Ideal workout sessions per week used for frequency scoring. */
+const IDEAL_WORKOUTS_PER_WEEK = 4;
+
+/**
+ * Balanced Consistency Score (0–100) blending four pillars:
+ *
+ *  50% — Workout frequency: active days in the last 28, ideal = 4/week (16 total)
+ *  25% — Streak:            current streak normalised to a 30-day ceiling
+ *  15% — Recovery:          proportion of trained muscle groups NOT in "needs_rest"
+ *  10% — Cardio:            sessions in the last 7 days, ideal = 2
+ *
+ * All four components are 0–100 before blending, so the weights are transparent.
+ */
+export function consistencyScore(state) {
+  const history          = state.history          ?? [];
+  const streak           = state.streak           ?? 0;
+  const cardioSessions   = state.cardioSessions   ?? [];
+  const muscleGrpHistory = state.muscleGroupHistory ?? {};
+
+  // 1. Frequency (50 %)
+  const IDEAL_28 = IDEAL_WORKOUTS_PER_WEEK * 4;
+  const days28   = activeDays(history, 28);
+  const freqScore = Math.min(100, Math.round((days28 / IDEAL_28) * 100));
+
+  // 2. Streak (25 %) — 30-day streak = 100
+  const streakScore = Math.min(100, Math.round((Math.min(streak, 30) / 30) * 100));
+
+  // 3. Recovery adherence (15 %) — no overtrained ("needs_rest") muscle groups
+  const statuses    = Object.values(muscleGroupStatuses(muscleGrpHistory));
+  const trained     = statuses.filter((s) => s !== 'ready'); // groups that have been worked
+  const recoveryScore =
+    trained.length === 0
+      ? 100 // no muscles worked yet → no violations
+      : Math.round(
+          (trained.filter((s) => s !== 'needs_rest').length / trained.length) * 100,
+        );
+
+  // 4. Cardio (10 %) — 2 sessions/week = 100
+  const { sessions: cardioWeek } = weeklyCardioStats(cardioSessions);
+  const cardioScore = Math.min(100, Math.round((cardioWeek / 2) * 100));
+
+  return Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round(
+        0.50 * freqScore +
+        0.25 * streakScore +
+        0.15 * recoveryScore +
+        0.10 * cardioScore,
+      ),
+    ),
+  );
+}
+
+/**
+ * Per-week workout-frequency scores for the last `weeks` weeks, oldest → newest.
+ * The final (current-week) entry is replaced with the real full `consistencyScore`
+ * so the trend line ends at the true score.
+ *
+ * @returns {number[]} Array of `weeks` values in [0, 100].
+ */
+export function consistencyTrend(state, weeks = 5, todayIso = TODAY) {
+  const history = state.history ?? [];
+  const scores  = [];
+
+  for (let i = weeks - 1; i >= 0; i--) {
+    const weekEnd   = isoOffset(new Date(todayIso + 'T00:00:00'), -(i * 7));
+    const weekStart = isoOffset(new Date(todayIso + 'T00:00:00'), -((i + 1) * 7));
+    const count = new Set(
+      history.filter((h) => h.date > weekStart && h.date <= weekEnd).map((h) => h.date),
+    ).size;
+    scores.push(Math.min(100, Math.round((count / IDEAL_WORKOUTS_PER_WEEK) * 100)));
+  }
+
+  // Anchor the last data-point to the live full score so the ring and trend agree
+  scores[scores.length - 1] = consistencyScore(state);
+  return scores;
 }

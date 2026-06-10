@@ -4,11 +4,13 @@ import { useToast } from '@/context/ToastContext';
 import GradientButton from '@/components/ui/GradientButton';
 
 const ERROR_MESSAGES = {
-  'auth/user-not-found': 'No account with that email.',
-  'auth/wrong-password': 'Incorrect password.',
+  // auth/user-not-found + auth/wrong-password collapsed → same message to prevent
+  // account-existence enumeration (an attacker must not learn which half is wrong).
+  'auth/user-not-found':     'Incorrect email or password.',
+  'auth/wrong-password':     'Incorrect email or password.',
   'auth/invalid-credential': 'Incorrect email or password.',
   'auth/email-already-in-use': 'An account with this email already exists.',
-  'auth/weak-password': 'Password must be at least 6 characters.',
+  'auth/weak-password': 'Password must be at least 8 characters.',
   'auth/invalid-email': 'Enter a valid email address.',
   'auth/too-many-requests': 'Too many attempts. Try again later.',
   'auth/network-request-failed': 'Network error. Check your connection.',
@@ -63,7 +65,7 @@ export default function SignIn() {
         )}
         <input className={fieldClass} type="email" placeholder="you@email.com" value={email}
           onChange={(e) => setEmail(e.target.value)} autoComplete="email" disabled={busy} />
-        <input className={fieldClass} type="password" placeholder={isSignUp ? 'Min. 6 characters' : '••••••••'}
+        <input className={fieldClass} type="password" placeholder={isSignUp ? 'Min. 8 characters' : '••••••••'}
           value={password} onChange={(e) => setPassword(e.target.value)}
           autoComplete={isSignUp ? 'new-password' : 'current-password'} disabled={busy} />
         <GradientButton type="submit" disabled={busy} className="mt-1">

@@ -66,60 +66,69 @@ _Files: `lib/fitlog.js`, `screens/SettingsScreen.jsx`, `screens/DashboardScreen.
 
 ---
 
-## Phase 3 — Body-weight log ⬜
+## Phase 3 — Body-weight log ✅
 
-- [ ] Add `weightLog: [{ id, date, kg }]` to `emptyState()`
-- [ ] Quick "log weight" entry (Settings, and/or Dashboard)
-- [ ] Real Settings weight-history rows (replace mock `78.5 kg (-0.2kg)`)
-- [ ] Dashboard weight delta / trend from the log
-- [ ] Latest logged weight feeds profile/TDEE automatically
+- [x] Add `weightLog: [{ id, date, kg }]` to `emptyState()`
+- [x] Quick "log weight" entry — "Body Weight" section in Settings with a BottomSheet input
+- [x] Real Settings weight-history rows (last 4 entries, newest first, each showing kg delta vs previous)
+- [x] Dashboard Weight StatPill shows delta vs previous entry (`+0.5 kg` / `-0.3 kg`)
+- [x] Latest logged weight auto-updates `profile.weightKg` → TDEE + macro targets recalculate immediately
 
-**Done when:** logging weight updates history + Dashboard trend and recalculates targets.
+**Verified:** logging weight appends to `weightLog`, updates `profile.weightKg`, reflects on Dashboard StatPill and weight-to-goal notice. ✅
 
----
-
-## Phase 4 — Consistency Score (real formula) ⬜
-
-- [ ] Pure `consistencyScore(state)` in `lib/fitlog.js` (from active days, streak, recovery, goal adherence)
-- [ ] Real trend line in `ScoreRing` (replace hardcoded polyline) + real `delta`
-- [ ] Wire into Dashboard (replace hardcoded `88`)
-
-**Note:** weighting is subjective — confirm what should move it most before finalizing.
-
-**Done when:** the score reflects actual logged activity and changes as you train.
+_Files: `lib/fitlog.js`, `components/ui/StatPill.jsx`, `screens/SettingsScreen.jsx`, `screens/DashboardScreen.jsx`._
 
 ---
 
-## Phase 5 — Extras / polish ⬜
+## Phase 4 — Consistency Score (real formula) ✅
 
-- [ ] **Units conversion** — kg/cm ↔ lb/in, persisted and applied everywhere
-- [ ] **Custom food creation** — UI to add/save user foods into `customFoods`
-- [ ] **Notifications** — real PWA reminder notifications behind the toggle
-- [ ] **Remove Dark-Mode toggle** — app is dark-only by design
-- [ ] **Workout duration timer** — replace `duration: 0` on logged sessions
-- [ ] (Optional) editable `sessionName`; real bell/notifications feed
+- [x] Pure `consistencyScore(state)` in `lib/fitlog.js` — balanced blend:
+  - 50% workout frequency (active days in last 28, ideal = 4/week)
+  - 25% current streak (normalised to 30-day ceiling)
+  - 15% recovery adherence (no overtrained muscle groups)
+  - 10% cardio sessions this week (ideal = 2)
+- [x] `consistencyTrend(state, weeks)` — per-week frequency scores (oldest → newest), last entry = full live score
+- [x] `ScoreRing` accepts `trendPoints` → real SVG polyline + direction-aware arrow tick; `delta` shows ↑/↓ with colour
+- [x] Dashboard wired: replaces hardcoded `88` / `delta={5}` with live score, delta vs previous week, real trend
+
+**Done when:** the score reflects actual logged activity and changes as you train. ✅
+
+_Files: `lib/fitlog.js`, `components/ui/ScoreRing.jsx`, `screens/DashboardScreen.jsx`._
 
 ---
 
-## Phase 6 — Security hardening ⬜
+## Phase 5 — Extras / polish ✅
+
+- [x] **Remove Dark-Mode toggle** — app is dark-only; row removed from Settings
+- [x] **Workout duration timer** — live `⏱ MM:SS` counter in Exercise tab; `duration` saved on session log; persists across tab switches via `sessionStorage`; resets on log
+- [x] **Custom food creation** — `CreateFoodSheet` (name + per-100g macros); accessible via "+ Create" in food search dropdown; saves to `state.customFoods` → synced via Firestore; shows up in search immediately
+- [x] **Units conversion** — `units: 'metric'|'imperial'` in state; helpers in `format.js` (`kgToLb`, `lbToKg`, `cmToIn`, `inToCm`, `cmToFtIn`); applied to Dashboard StatPills, Settings profile summary, profile/goal/weight-log sheets, weight-to-goal notice; storage stays metric always
+- [x] **Notifications** — toggle calls `Notification.requestPermission()`; preference stored in `state.notificationsEnabled`; reminder fires 30s after app load when enabled + no workout logged today (works while tab is open)
+
+_Files: `lib/format.js`, `lib/fitlog.js`, `screens/ExerciseScreen.jsx`, `screens/NutritionScreen.jsx`, `screens/SettingsScreen.jsx`, `screens/DashboardScreen.jsx`, `App.jsx`._
+
+---
+
+## Phase 6 — Security hardening ✅
 
 Audit summary — **already solid:** Firestore rules scope read/write to the owner's `/users/{uid}` subtree · `.env` gitignored, only the public Firebase web config ships, no admin SDK / service-account in the repo · React auto-escapes and there's no `dangerouslySetInnerHTML` in app code (no XSS sink) · HTTPS via Vercel.
 
 **Gaps to close, by priority:**
 
-### Tier 1 — critical, low effort
-- [ ] **Firestore rules validation** — current rules let an authed user write *anything* (any shape/size) to their own doc. Add type checks, field allow-list, and a doc-size guard in `firestore.rules`.
-- [ ] **Email-verified gate** — require `request.auth.token.email_verified == true` in rules so unverified sign-ups can't read/write data.
-- [ ] **Security headers** in `vercel.json` — CSP (limit `script/connect/img` to self + `*.googleapis.com`/`*.firebaseio.com`/`*.gstatic.com`), HSTS, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` / `frame-ancestors 'none'`, `Referrer-Policy`, `Permissions-Policy`.
-- [ ] **Reproducible rule deploys** — add `firebase.json` + `.firebaserc` so `firestore.rules` deploys via CLI (no manual console drift).
-- [ ] **Fix auth enumeration leak** — `SignIn` distinguishes "no account" vs "wrong password"; collapse to a generic message **and** enable Firebase Auth *email-enumeration protection*.
+### Tier 1 — critical, low effort ✅
+- [x] **Firestore rules validation** — `firestore.rules` rewritten: only `users/{uid}/data/fitlog` is matched (all other paths denied by default), email-verified gate, top-level field allow-list (15 keys), scalar type checks, array size caps (history ≤ 500, exercises ≤ 50, meals ≤ 20, cardio ≤ 500, weightLog ≤ 365, customFoods ≤ 200).
+- [x] **Email-verified gate** — `request.auth.token.email_verified == true` in rules + full UI flow: `sendEmailVerification` on sign-up, `EmailVerification.jsx` screen (resend + reload buttons), `App.jsx` gates behind `user.emailVerified`.
+- [x] **Security headers** — `vercel.json` updated: HSTS (2yr + preload), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, full CSP (`default-src 'self'`, Firebase/Google allowlist for `connect-src`, `frame-ancestors 'none'`).
+- [x] **Reproducible rule deploys** — `firebase.json` + `.firebaserc` (project `fitlog-e400e`) + `firestore.indexes.json` added; deploy with `firebase deploy --only firestore:rules`.
+- [x] **Fix auth enumeration leak** — `auth/user-not-found` and `auth/wrong-password` now return the same generic message as `auth/invalid-credential`; password placeholder updated to "Min. 8 characters".
 
-### Tier 2 — important
-- [ ] **Firebase App Check** (reCAPTCHA v3 / Enterprise) so the public API key can't be abused outside the real app; enforce on Firestore + Auth.
-- [ ] **Email verification flow** — send verification on sign-up, gate data access until verified.
-- [ ] **Password policy** — enable Firebase Auth stronger-password policy; reflect min rules in the sign-up UI.
-- [ ] **Account deletion + data export** — delete Auth user *and* Firestore doc; export JSON (privacy/GDPR). Re-auth before destructive actions.
-- [ ] **Doc-size strategy** — entire state lives in one 1 MB-capped doc; cap/trim `history`/`meals` or plan a subcollection migration to avoid hitting the limit or doc-bloat abuse.
+### Tier 2 — important (partial) ✅
+- [x] **Email verification flow** — covered above (Tier 1 gate + UI).
+- [x] **Password policy** — sign-up UI reflects min-8 requirement; Firebase console should be set to enforce ≥8 chars.
+- [x] **Account deletion** — `DeleteAccountSheet` in Settings: re-authenticates with password, deletes Firestore doc then Auth user; `deleteAccount(password)` added to `AuthContext`.
+- [x] **Doc-size strategy** — `trimForFirestore()` in `useFitlogData.js` caps arrays before every Firestore write (history/cardio ≤ 500, weightLog ≤ 365). Local state is untrimmed for display.
+- [ ] **Firebase App Check** — requires reCAPTCHA key from Firebase console; not automated.
+- [x] **Data export (JSON)** — "Export My Data" row in Settings; downloads `fitlog-export-YYYY-MM-DD.json` containing the full state blob.
 
 ### Tier 3 — ongoing / ops
 - [ ] **Authorized domains** review (only prod domain + localhost) in Firebase Auth.
@@ -128,12 +137,15 @@ Audit summary — **already solid:** Firestore rules scope read/write to the own
 - [ ] **Service-worker cache review** — vite-plugin-pwa precaches same-origin only; never cache auth/Firestore responses.
 - [ ] (Optional) **MFA / blocking functions** — block disposable-email domains, optional TOTP MFA.
 
-**Done when:** rules reject malformed/oversized/unverified writes, App Check is enforced, headers score well on securityheaders.com, and there's a tested account-deletion path.
+**Note for the test account:** if `emailVerified` is currently `false` on the throwaway account, open the app → use the verification screen to resend → click the link → press "I've verified". Alternatively verify via Firebase Console → Authentication → Users.
+
+_Files: `firestore.rules`, `firebase.json`, `.firebaserc`, `firestore.indexes.json`, `vercel.json`, `src/components/SignIn.jsx`, `src/context/AuthContext.jsx`, `src/components/EmailVerification.jsx`, `src/App.jsx`, `src/screens/SettingsScreen.jsx`, `src/hooks/useFitlogData.js`._
 
 ---
 
 ## Open questions / blockers
 
 - ✅ ~~Testing creds~~ — throwaway account created (credentials shared privately, not committed); real auth + sync verified.
-- ❓ Consistency Score weighting (Phase 4) — what should matter most?
-- ❓ Security: should I start with **Tier 1** quick wins now (rules validation + headers + firebase.json)? App Check (Tier 2) needs a reCAPTCHA key from your Firebase console.
+- ✅ ~~Consistency Score weighting~~ — balanced blend: frequency 50%, streak 25%, recovery 15%, cardio 10%.
+- ✅ ~~Security Tier 1~~ — all done. App Check (Tier 2) still needs a reCAPTCHA key from the Firebase console.
+- ❓ **Firebase App Check** — requires setting up reCAPTCHA Enterprise in Firebase Console, generating a site key, and passing it to `initializeAppCheck()`. Cannot be automated without Console access.

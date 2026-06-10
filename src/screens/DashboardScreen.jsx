@@ -1,4 +1,5 @@
 import { Dumbbell, EyeOff, Target } from 'lucide-react';
+import { kgToLb, cmToFtIn } from '@/lib/format';
 import AppScreen from '@/components/ui/AppScreen';
 import TopBar from '@/components/ui/TopBar';
 import Card from '@/components/ui/Card';
@@ -7,7 +8,10 @@ import ScoreRing from '@/components/ui/ScoreRing';
 import ProgressBar from '@/components/ui/ProgressBar';
 import NoticeCard from '@/components/ui/NoticeCard';
 import { useToast } from '@/context/ToastContext';
-import { macroTotals, activeDays, lastWorkoutIso, computeNutritionTargets } from '@/lib/fitlog';
+import {
+  macroTotals, activeDays, lastWorkoutIso, computeNutritionTargets,
+  weightDelta, consistencyScore, consistencyTrend,
+} from '@/lib/fitlog';
 
 export default function DashboardScreen({ state }) {
   const { showToast } = useToast();
@@ -20,9 +24,43 @@ export default function DashboardScreen({ state }) {
   const cal = Math.round(totals.cal);
   const intakePct = Math.round((cal / calorieGoal) * 100);
 
+  // Units
+  const units    = state.units ?? 'metric';
+  const imperial = units === 'imperial';
+
+  // Consistency Score — real formula (frequency 50%, streak 25%, recovery 15%, cardio 10%)
+  const trend      = consistencyTrend(state);
+  const csScore    = trend[trend.length - 1];          // = consistencyScore(state)
+  const csPrev     = trend[trend.length - 2] ?? null;
+  const csDelta    = csPrev != null ? csScore - csPrev : null;
+
+  // Weight trend delta from the log (e.g. "+0.5 kg" or "-0.3 kg")
+  const wDelta = weightDelta(state.weightLog ?? []);
+  const wDeltaLabel = wDelta != null
+    ? `${wDelta > 0 ? '+' : ''}${wDelta} kg`
+    : null;
+
+  // Weight display (units-aware)
+  const heightDisplay = profile.heightCm
+    ? (imperial ? cmToFtIn(profile.heightCm) : `${profile.heightCm} cm`)
+    : '—';
+  const weightDisplay = profile.weightKg
+    ? (imperial ? `${kgToLb(profile.weightKg)} lb` : `${profile.weightKg} kg`)
+    : '—';
+
   // Weight-to-goal (real if both current + target weight are set)
-  const targetW = state.goal?.targetWeightKg;
-  const toGo = targetW && profile.weightKg ? Math.round((profile.weightKg - targetW) * 10) / 10 : null;
+  const targetW    = state.goal?.targetWeightKg;
+  const toGoKg     = targetW && profile.weightKg
+    ? Math.round((profile.weightKg - targetW) * 10) / 10
+    : null;
+  // Display toGo in the user's preferred unit
+  const toGo       = toGoKg != null
+    ? (imperial ? Math.round(Math.abs(toGoKg) * 2.20462 * 10) / 10 : Math.abs(toGoKg))
+    : null;
+  const unitLabel  = imperial ? 'lb' : 'kg';
+  const targetWDisplay = targetW
+    ? (imperial ? `${kgToLb(targetW)} lb` : `${targetW} kg`)
+    : null;
 
   // Real-ish: distinct workout days in the last 7
   const daysActive = activeDays(state.history, 7);
@@ -42,12 +80,12 @@ export default function DashboardScreen({ state }) {
         <Card className="mb-4">
           {/* Height / Weight — from the user's profile (Settings → Edit) */}
           <div className="flex gap-3 mb-5">
-            <StatPill label="Height" value={profile.heightCm ? `${profile.heightCm} cm` : '—'} />
-            <StatPill label="Weight" value={profile.weightKg ? `${profile.weightKg} kg` : '—'} />
+            <StatPill label="Height" value={heightDisplay} />
+            <StatPill label="Weight" value={weightDisplay} sub={wDeltaLabel} />
           </div>
 
-          {/* Consistency Score — TODO: wire real data (Phase 4: derived from workout consistency) */}
-          <ScoreRing score={88} delta={5} />
+          {/* Consistency Score — REAL (frequency · streak · recovery · cardio) */}
+          <ScoreRing score={csScore} delta={csDelta} trendPoints={trend} />
 
           <div className="h-px bg-white/6 my-5" />
 
@@ -97,13 +135,13 @@ export default function DashboardScreen({ state }) {
         )}
 
         {/* Real weight-to-goal progress (shown once a target weight is set) */}
-        {toGo != null && toGo !== 0 && (
+        {toGoKg != null && toGoKg !== 0 && (
           <NoticeCard tone="neutral" icon={<Target className="w-5 h-5" strokeWidth={1.75} />}>
-            <span className="text-ink font-semibold">{Math.abs(toGo)} kg</span> to{' '}
-            {toGo > 0 ? 'lose' : 'gain'} to reach your {targetW} kg goal.
+            <span className="text-ink font-semibold">{toGo} {unitLabel}</span> to{' '}
+            {toGoKg > 0 ? 'lose' : 'gain'} to reach your {targetWDisplay} goal.
           </NoticeCard>
         )}
-        {toGo === 0 && (
+        {toGoKg === 0 && (
           <NoticeCard tone="neutral" icon={<Target className="w-5 h-5" strokeWidth={1.75} />}>
             You&apos;ve reached your goal weight 🎉
           </NoticeCard>

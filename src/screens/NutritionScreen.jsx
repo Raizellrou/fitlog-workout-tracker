@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Coffee, Salad, Fish, Apple, Search, X, Trash2 } from 'lucide-react';
+import { Coffee, Salad, Fish, Apple, Search, X, Trash2, PlusCircle } from 'lucide-react';
 import AppScreen from '@/components/ui/AppScreen';
 import TopBar from '@/components/ui/TopBar';
 import Card from '@/components/ui/Card';
@@ -32,8 +32,86 @@ function MealIcon({ type, className }) {
   return <Icon className={className} strokeWidth={1.9} />;
 }
 
+// ── Create Custom Food sheet ────────────────────────────────────────────────
+function CreateFoodSheet({ seedName, onClose, onSave }) {
+  const { showToast } = useToast();
+  const [name, setName] = useState(seedName ?? '');
+  const [cal, setCal] = useState('');
+  const [p, setP] = useState('');
+  const [c, setC] = useState('');
+  const [f, setF] = useState('');
+
+  const save = () => {
+    if (!name.trim()) return showToast('Enter a food name');
+    const calories = parseFloat(cal);
+    if (!calories || calories <= 0) return showToast('Enter calories per 100g');
+    onSave({
+      id: crypto.randomUUID(),
+      name: name.trim(),
+      custom: true,
+      variants: [{
+        label: 'default',
+        per100g: {
+          cal: calories,
+          p: parseFloat(p) || 0,
+          c: parseFloat(c) || 0,
+          f: parseFloat(f) || 0,
+        },
+      }],
+    });
+  };
+
+  const macroFields = [
+    ['Calories', cal, setCal, 'kcal'],
+    ['Protein',  p,   setP,   'g'],
+    ['Carbs',    c,   setC,   'g'],
+    ['Fat',      f,   setF,   'g'],
+  ];
+
+  return (
+    <BottomSheet
+      title="Create Custom Food"
+      onClose={onClose}
+      footer={<GradientButton onClick={save}>Save Food</GradientButton>}
+    >
+      <label className="block text-[13px] font-medium text-muted mb-2">Food name</label>
+      <div className="rounded-xl bg-surface-2 border border-white/5 px-3.5 mb-5 focus-within:border-accent/50 transition-colors">
+        <input
+          className="w-full bg-transparent py-3 text-[15px] text-ink outline-none placeholder:text-faint"
+          placeholder="e.g. Greek Yogurt"
+          // eslint-disable-next-line jsx-a11y/no-autofocus
+          autoFocus
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+      </div>
+
+      <label className="block text-[13px] font-medium text-muted mb-2">Macros per 100g</label>
+      <div className="grid grid-cols-2 gap-3">
+        {macroFields.map(([label, val, setter, unit]) => (
+          <div key={label}>
+            <span className="block text-[11px] text-muted mb-1.5">{label}</span>
+            <div className="flex items-center rounded-xl bg-surface-2 border border-white/5 px-2.5 focus-within:border-accent/50 transition-colors">
+              <input
+                className="w-full min-w-0 bg-transparent py-3 text-[15px] text-ink outline-none tnum"
+                type="number" min="0" inputMode="decimal" placeholder="0"
+                value={val}
+                onChange={(e) => setter(e.target.value)}
+              />
+              <span className="text-xs text-faint pl-1">{unit}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="text-[12px] text-faint mt-4">
+        Saved foods appear in search and sync across your devices.
+      </p>
+    </BottomSheet>
+  );
+}
+
 // ── Add Meal bottom sheet ───────────────────────────────────────────────────
-function AddMealSheet({ onClose, onSave, customFoods }) {
+function AddMealSheet({ onClose, onSave, customFoods, onRequestCreateFood }) {
   const { showToast } = useToast();
   const [mealType, setMealType] = useState('Breakfast');
   const [foods, setFoods] = useState([]);
@@ -152,7 +230,7 @@ function AddMealSheet({ onClose, onSave, customFoods }) {
                   autoComplete="off"
                 />
               </div>
-              {results.length > 0 && (
+              {(results.length > 0 || query.trim().length > 0) && (
                 <div className="mt-2 rounded-xl bg-surface-2 border border-white/10 overflow-hidden max-h-56 overflow-y-auto no-scrollbar">
                   {results.map((food) => (
                     <button
@@ -164,6 +242,16 @@ function AddMealSheet({ onClose, onSave, customFoods }) {
                       <span className="text-[11px] text-muted shrink-0 tnum">{food.variants[0].per100g.cal} kcal/100g</span>
                     </button>
                   ))}
+                  {/* Create custom food shortcut */}
+                  <button
+                    onClick={() => onRequestCreateFood(query.trim())}
+                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left border-t border-white/5 text-accent-light active:bg-white/5"
+                  >
+                    <PlusCircle className="w-4 h-4 shrink-0" strokeWidth={2} />
+                    <span className="text-sm">
+                      {query.trim() ? `Create "${query.trim()}"` : 'Create custom food'}
+                    </span>
+                  </button>
                 </div>
               )}
             </div>
@@ -233,6 +321,8 @@ export default function NutritionScreen({ state, update }) {
   const { meals, customFoods = [] } = state;
   const { showToast } = useToast();
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [createFoodOpen, setCreateFoodOpen] = useState(false);
+  const [createFoodSeed, setCreateFoodSeed] = useState('');
 
   const totals = macroTotals(meals);
   const pct = macroPercents(totals);
@@ -245,6 +335,18 @@ export default function NutritionScreen({ state, update }) {
     showToast('Meal logged ✓');
   };
   const deleteMeal = (id) => update((s) => ({ ...s, meals: s.meals.filter((m) => m.id !== id) }));
+
+  const handleRequestCreateFood = (seedName) => {
+    setSheetOpen(false);
+    setCreateFoodSeed(seedName);
+    setCreateFoodOpen(true);
+  };
+
+  const saveCustomFood = (food) => {
+    update((s) => ({ ...s, customFoods: [...(s.customFoods ?? []), food] }));
+    setCreateFoodOpen(false);
+    showToast('Custom food saved ✓');
+  };
 
   return (
     <>
@@ -322,7 +424,19 @@ export default function NutritionScreen({ state, update }) {
       </div>
 
       {sheetOpen && (
-        <AddMealSheet customFoods={customFoods} onClose={() => setSheetOpen(false)} onSave={saveMeal} />
+        <AddMealSheet
+          customFoods={customFoods}
+          onClose={() => setSheetOpen(false)}
+          onSave={saveMeal}
+          onRequestCreateFood={handleRequestCreateFood}
+        />
+      )}
+      {createFoodOpen && (
+        <CreateFoodSheet
+          seedName={createFoodSeed}
+          onClose={() => setCreateFoodOpen(false)}
+          onSave={saveCustomFood}
+        />
       )}
     </>
   );

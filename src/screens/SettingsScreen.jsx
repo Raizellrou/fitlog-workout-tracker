@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  Dumbbell, Scale, Target, Moon, Bell, Ruler, LogOut, ChevronDown, Check,
+  Dumbbell, Scale, Target, Bell, Ruler, LogOut, Check, Plus, Trash2, Download,
 } from 'lucide-react';
 import AppScreen from '@/components/ui/AppScreen';
 import TopBar from '@/components/ui/TopBar';
@@ -11,7 +11,7 @@ import BottomSheet from '@/components/ui/BottomSheet';
 import GradientButton from '@/components/ui/GradientButton';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
-import { formatDuration } from '@/lib/format';
+import { formatDuration, TODAY, kgToLb, lbToKg, cmToIn, inToCm, cmToFtIn } from '@/lib/format';
 import {
   SEX_OPTIONS, ACTIVITY_LEVELS, emptyProfile, profileComplete,
   GOAL_TYPES, emptyGoal, computeNutritionTargets, PROTEIN_PER_LB_MIN, PROTEIN_PER_LB_MAX,
@@ -26,28 +26,38 @@ function SectionTitle({ children }) {
 }
 
 // ── Edit Profile sheet ───────────────────────────────────────────────────────
-function ProfileSheet({ profile, onClose, onSave }) {
+function ProfileSheet({ profile, units, onClose, onSave }) {
   const { showToast } = useToast();
+  const imperial = units === 'imperial';
+
   const [sex, setSex] = useState(profile.sex || 'male');
   const [age, setAge] = useState(profile.age ?? '');
-  const [heightCm, setHeightCm] = useState(profile.heightCm ?? '');
-  const [weightKg, setWeightKg] = useState(profile.weightKg ?? '');
+  // Display values in the user's chosen units; storage stays metric
+  const [heightVal, setHeightVal] = useState(
+    profile.heightCm ? (imperial ? String(cmToIn(profile.heightCm)) : String(profile.heightCm)) : '',
+  );
+  const [weightVal, setWeightVal] = useState(
+    profile.weightKg ? (imperial ? String(kgToLb(profile.weightKg)) : String(profile.weightKg)) : '',
+  );
   const [activityLevel, setActivityLevel] = useState(profile.activityLevel || 'moderate');
 
   const save = () => {
     const a = parseInt(age, 10);
-    const h = parseFloat(heightCm);
-    const w = parseFloat(weightKg);
+    const hRaw = parseFloat(heightVal);
+    const wRaw = parseFloat(weightVal);
     if (!a || a <= 0) return showToast('Enter a valid age');
-    if (!h || h <= 0) return showToast('Enter a valid height');
-    if (!w || w <= 0) return showToast('Enter a valid weight');
-    onSave({ sex, age: a, heightCm: h, weightKg: w, activityLevel });
+    if (!hRaw || hRaw <= 0) return showToast('Enter a valid height');
+    if (!wRaw || wRaw <= 0) return showToast('Enter a valid weight');
+    // Convert back to metric before saving
+    const heightCm = imperial ? inToCm(hRaw) : hRaw;
+    const weightKg = imperial ? lbToKg(wRaw) : wRaw;
+    onSave({ sex, age: a, heightCm, weightKg, activityLevel });
   };
 
   const metrics = [
-    ['Age', age, setAge, 'yrs'],
-    ['Height', heightCm, setHeightCm, 'cm'],
-    ['Weight', weightKg, setWeightKg, 'kg'],
+    ['Age',    age,       setAge,       'yrs'],
+    ['Height', heightVal, setHeightVal, imperial ? 'in' : 'cm'],
+    ['Weight', weightVal, setWeightVal, imperial ? 'lb' : 'kg'],
   ];
 
   return (
@@ -81,10 +91,7 @@ function ProfileSheet({ profile, onClose, onSave }) {
             <div className="flex items-center rounded-xl bg-surface-2 border border-white/5 px-2.5 focus-within:border-accent/50 transition-colors">
               <input
                 className="w-full min-w-0 bg-transparent py-3 text-[15px] text-ink outline-none tnum"
-                type="number"
-                min="0"
-                inputMode="decimal"
-                placeholder="0"
+                type="number" min="0" inputMode="decimal" placeholder="0"
                 value={val}
                 onChange={(e) => setter(e.target.value)}
               />
@@ -121,17 +128,26 @@ function ProfileSheet({ profile, onClose, onSave }) {
 }
 
 // ── Goal sheet (drives macro targets) ────────────────────────────────────────
-function GoalSheet({ profile, goal, onClose, onSave }) {
+function GoalSheet({ profile, goal, units, onClose, onSave }) {
+  const imperial = units === 'imperial';
   const [type, setType] = useState(goal.type || 'lean_bulk');
-  const [targetWeightKg, setTargetWeightKg] = useState(goal.targetWeightKg ?? '');
+  const [targetVal, setTargetVal] = useState(
+    goal.targetWeightKg
+      ? String(imperial ? kgToLb(goal.targetWeightKg) : goal.targetWeightKg)
+      : '',
+  );
   const [proteinPerLb, setProteinPerLb] = useState(goal.proteinPerLb ?? 1.0);
 
-  const draft = { type, targetWeightKg: parseFloat(targetWeightKg) || null, proteinPerLb };
+  const targetKg = parseFloat(targetVal)
+    ? (imperial ? lbToKg(parseFloat(targetVal)) : parseFloat(targetVal))
+    : null;
+
+  const draft = { type, targetWeightKg: targetKg, proteinPerLb };
   const preview = computeNutritionTargets(profile, draft);
 
   const stepProtein = (d) =>
     setProteinPerLb((v) =>
-      Math.round(Math.min(PROTEIN_PER_LB_MAX, Math.max(PROTEIN_PER_LB_MIN, v + d)) * 100) / 100
+      Math.round(Math.min(PROTEIN_PER_LB_MAX, Math.max(PROTEIN_PER_LB_MIN, v + d)) * 100) / 100,
     );
 
   return (
@@ -177,13 +193,13 @@ function GoalSheet({ profile, goal, onClose, onSave }) {
         <input
           className="w-full bg-transparent py-3 text-[15px] text-ink outline-none tnum"
           type="number" min="0" inputMode="decimal" placeholder="Optional"
-          value={targetWeightKg}
-          onChange={(e) => setTargetWeightKg(e.target.value)}
+          value={targetVal}
+          onChange={(e) => setTargetVal(e.target.value)}
         />
-        <span className="text-xs text-faint pl-1">kg</span>
+        <span className="text-xs text-faint pl-1">{imperial ? 'lb' : 'kg'}</span>
       </div>
 
-      {/* Protein anchor (Jacob Oestreicher: 0.8–1.0 g/lb) */}
+      {/* Protein anchor */}
       <label className="block text-[13px] font-medium text-muted mb-1">
         Protein <span className="text-faint">(the anchor — 0.8–1.0 g/lb)</span>
       </label>
@@ -220,28 +236,143 @@ function GoalSheet({ profile, goal, onClose, onSave }) {
   );
 }
 
+// ── Log Weight sheet ─────────────────────────────────────────────────────────
+function LogWeightSheet({ currentKg, units, onClose, onSave }) {
+  const { showToast } = useToast();
+  const imperial = units === 'imperial';
+  const [val, setVal] = useState(
+    currentKg ? String(imperial ? kgToLb(currentKg) : currentKg) : '',
+  );
+
+  const save = () => {
+    const raw = parseFloat(val);
+    if (!raw || raw <= 0) return showToast('Enter a valid weight');
+    const kg = imperial ? lbToKg(raw) : raw;
+    onSave(kg);
+  };
+
+  return (
+    <BottomSheet
+      title="Log Weight"
+      onClose={onClose}
+      footer={<GradientButton onClick={save}>Save Weight</GradientButton>}
+    >
+      <label className="block text-[13px] font-medium text-muted mb-2">Today&apos;s weight</label>
+      <div className="flex items-center rounded-xl bg-surface-2 border border-white/5 px-3.5 mb-4 focus-within:border-accent/50 transition-colors">
+        <input
+          className="w-full bg-transparent py-3 text-[15px] text-ink outline-none tnum"
+          type="number" min="0" inputMode="decimal" placeholder="0"
+          // eslint-disable-next-line jsx-a11y/no-autofocus
+          autoFocus
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+        />
+        <span className="text-xs text-faint pl-1">{imperial ? 'lb' : 'kg'}</span>
+      </div>
+      <p className="text-[12px] text-faint">
+        Saving updates your profile weight and recalculates calorie targets.
+      </p>
+    </BottomSheet>
+  );
+}
+
+// ── Delete Account sheet ─────────────────────────────────────────────────────
+function DeleteAccountSheet({ onClose, onConfirm }) {
+  const { showToast } = useToast();
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const confirm = async () => {
+    if (!password) return showToast('Enter your password to confirm');
+    setBusy(true);
+    try {
+      await onConfirm(password);
+    } catch (err) {
+      const msg =
+        err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential'
+          ? 'Incorrect password.'
+          : err.code === 'auth/too-many-requests'
+          ? 'Too many attempts — try again later.'
+          : 'Could not delete account. Try again.';
+      showToast(msg);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <BottomSheet
+      title="Delete Account"
+      onClose={onClose}
+      footer={
+        <button
+          onClick={confirm}
+          disabled={busy}
+          className="w-full rounded-full bg-danger/15 border border-danger/40 text-danger font-semibold py-3.5 text-sm active:scale-[0.98] transition-transform disabled:opacity-50"
+        >
+          {busy ? 'Deleting…' : 'Permanently Delete My Account'}
+        </button>
+      }
+    >
+      <div className="rounded-xl bg-danger/10 border border-danger/25 px-3.5 py-3 text-[13px] text-danger mb-5">
+        This permanently deletes your account and all synced data. This action
+        cannot be undone.
+      </div>
+      <label className="block text-[13px] font-medium text-muted mb-2">
+        Confirm with your password
+      </label>
+      <div className="flex items-center rounded-xl bg-surface-2 border border-white/5 px-3.5 focus-within:border-danger/50 transition-colors">
+        <input
+          className="w-full bg-transparent py-3 text-[15px] text-ink outline-none"
+          type="password"
+          placeholder="••••••••"
+          // eslint-disable-next-line jsx-a11y/no-autofocus
+          autoFocus
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          disabled={busy}
+        />
+      </div>
+    </BottomSheet>
+  );
+}
+
 // ── Screen ───────────────────────────────────────────────────────────────────
 export default function SettingsScreen({ state, update }) {
-  const { user, signOut } = useAuth();
+  const { user, signOut, deleteAccount } = useAuth();
   const { showToast } = useToast();
 
   const profile = state.profile ?? emptyProfile();
-  const goal = state.goal ?? emptyGoal();
+  const goal    = state.goal    ?? emptyGoal();
+  const units   = state.units   ?? 'metric';
+  const imperial = units === 'imperial';
+
   const targets = computeNutritionTargets(profile, goal);
   const goalDef = GOAL_TYPES.find((g) => g.id === goal.type) ?? GOAL_TYPES[0];
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [goalOpen, setGoalOpen] = useState(false);
 
-  // TODO: wire real data (these toggles/units are UI-only for now)
-  const [darkMode, setDarkMode] = useState(true);
-  const [notifications, setNotifications] = useState(true);
+  const [profileOpen,      setProfileOpen]      = useState(false);
+  const [goalOpen,         setGoalOpen]         = useState(false);
+  const [weightOpen,       setWeightOpen]        = useState(false);
+  const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
 
-  const name = user?.displayName || user?.email?.split('@')[0] || 'Athlete';
+  // Weight log — sorted newest first, show last 4
+  const weightLog       = state.weightLog ?? [];
+  const sortedWeightLog = [...weightLog].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 4);
+
+  // Display helpers
+  const displayWeight = (kg) =>
+    imperial ? `${kgToLb(kg)} lb` : `${kg} kg`;
+  const displayHeight = (cm) =>
+    imperial ? cmToFtIn(cm) : `${cm} cm`;
+
+  const name    = user?.displayName || user?.email?.split('@')[0] || 'Athlete';
   const initial = name.charAt(0).toUpperCase();
 
   const profileSummary = profileComplete(profile)
-    ? `${cap(profile.sex)} · ${profile.age} yrs · ${profile.weightKg} kg`
+    ? `${cap(profile.sex)} · ${profile.age} yrs · ${displayWeight(profile.weightKg)}`
     : 'Tap Edit to set up your profile';
+
+  // ── Handlers ──────────────────────────────────────────────────────────────
 
   const saveProfile = (next) => {
     update((s) => ({ ...s, profile: { ...emptyProfile(), ...s.profile, ...next } }));
@@ -253,6 +384,50 @@ export default function SettingsScreen({ state, update }) {
     update((s) => ({ ...s, goal: { ...emptyGoal(), ...s.goal, ...next } }));
     setGoalOpen(false);
     showToast('Goal updated ✓');
+  };
+
+  const saveWeight = (kg) => {
+    update((s) => ({
+      ...s,
+      weightLog: [...(s.weightLog ?? []), { id: crypto.randomUUID(), date: TODAY, kg }],
+      profile:   { ...(s.profile ?? emptyProfile()), weightKg: kg },
+    }));
+    setWeightOpen(false);
+    showToast('Weight logged ✓');
+  };
+
+  const toggleUnits = () => {
+    update((s) => ({ ...s, units: (s.units ?? 'metric') === 'metric' ? 'imperial' : 'metric' }));
+  };
+
+  const toggleNotifications = async (val) => {
+    if (val) {
+      if (!('Notification' in window)) {
+        return showToast('Notifications not supported in this browser');
+      }
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        return showToast('Notification permission denied');
+      }
+    }
+    update((s) => ({ ...s, notificationsEnabled: val }));
+  };
+
+  const exportData = () => {
+    try {
+      const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = `fitlog-export-${TODAY}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('Data exported ✓');
+    } catch {
+      showToast('Export failed — try again');
+    }
   };
 
   // Real: recent workouts from history
@@ -280,7 +455,7 @@ export default function SettingsScreen({ state, update }) {
           </button>
         </Card>
 
-        {/* Goal settings — real, goal-driven macro targets */}
+        {/* Goal settings */}
         <SectionTitle>Goal Settings</SectionTitle>
         <ListRow
           icon={<Target className="w-5 h-5" strokeWidth={1.9} />}
@@ -292,13 +467,15 @@ export default function SettingsScreen({ state, update }) {
           }
           trailing={
             <span className="text-sm text-muted">
-              {goal.targetWeightKg ? `Target ${goal.targetWeightKg}kg` : 'Set'}
+              {goal.targetWeightKg
+                ? `Target ${displayWeight(goal.targetWeightKg)}`
+                : 'Set'}
             </span>
           }
           onClick={() => setGoalOpen(true)}
         />
 
-        {/* Activity history — real workouts (+ one mock weight entry to match design) */}
+        {/* Activity history */}
         <SectionTitle>Activity History</SectionTitle>
         <div className="flex flex-col gap-2">
           {workouts.length === 0 ? (
@@ -316,50 +493,129 @@ export default function SettingsScreen({ state, update }) {
               />
             ))
           )}
-          {/* TODO: wire real data (body-weight log — Phase 3) */}
+        </div>
+
+        {/* Body Weight log */}
+        <SectionTitle>Body Weight</SectionTitle>
+        <div className="flex flex-col gap-2">
           <ListRow
-            icon={<Scale className="w-5 h-5" strokeWidth={1.9} />}
-            title="Weight"
-            subtitle="78.5 kg (-0.2kg)"
-            trailing={<span className="text-sm text-muted">Tue</span>}
+            icon={
+              <span className="grid place-items-center w-full h-full">
+                <Plus className="w-4 h-4" strokeWidth={2.5} />
+              </span>
+            }
+            title="Log Today's Weight"
+            onClick={() => setWeightOpen(true)}
+            trailing={<span className="text-sm text-muted">+</span>}
           />
+          {sortedWeightLog.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-white/10 py-6 text-center text-sm text-muted">
+              No weight entries yet.
+            </div>
+          ) : (
+            sortedWeightLog.map((entry, i) => {
+              const prev = sortedWeightLog[i + 1];
+              const deltaKg = prev ? Math.round((entry.kg - prev.kg) * 10) / 10 : null;
+              const deltaDisplay = deltaKg != null
+                ? `${deltaKg > 0 ? '+' : ''}${imperial ? kgToLb(Math.abs(deltaKg)) * (deltaKg < 0 ? -1 : 1) : deltaKg} ${imperial ? 'lb' : 'kg'} vs prev`
+                : 'First entry';
+              return (
+                <ListRow
+                  key={entry.id}
+                  icon={<Scale className="w-5 h-5" strokeWidth={1.9} />}
+                  title={displayWeight(entry.kg)}
+                  subtitle={deltaDisplay}
+                  trailing={<span className="text-sm text-muted">{weekday(entry.date)}</span>}
+                />
+              );
+            })
+          )}
         </div>
 
         {/* Settings */}
         <SectionTitle>Settings</SectionTitle>
         <div className="flex flex-col gap-2">
           <ListRow
-            icon={<Moon className="w-5 h-5" strokeWidth={1.9} />}
-            title="Dark Mode"
-            trailing={<Toggle checked={darkMode} onChange={setDarkMode} />}
-          />
-          <ListRow
             icon={<Bell className="w-5 h-5" strokeWidth={1.9} />}
             title="Notifications"
-            trailing={<Toggle checked={notifications} onChange={setNotifications} />}
+            subtitle={
+              state.notificationsEnabled
+                ? 'Workout reminders enabled'
+                : 'Tap to enable workout reminders'
+            }
+            trailing={
+              <Toggle
+                checked={state.notificationsEnabled ?? false}
+                onChange={toggleNotifications}
+              />
+            }
           />
           <ListRow
             icon={<Ruler className="w-5 h-5" strokeWidth={1.9} />}
             title="Units"
+            subtitle={imperial ? 'Imperial (lb / in)' : 'Metric (kg / cm)'}
             trailing={
-              <span className="flex items-center gap-1 text-sm text-muted">
-                kg/cm <ChevronDown className="w-4 h-4" strokeWidth={2} />
-              </span>
+              <button
+                onClick={toggleUnits}
+                className="rounded-full bg-surface-2 border border-white/8 px-3.5 py-1.5 text-sm font-medium text-ink active:scale-[0.97] transition-transform"
+              >
+                {imperial ? 'kg/cm' : 'lb/in'}
+              </button>
             }
+          />
+          <ListRow
+            icon={<Download className="w-5 h-5" strokeWidth={1.9} />}
+            title="Export My Data"
+            subtitle="Download all data as JSON"
+            onClick={exportData}
           />
           <ListRow
             icon={<LogOut className="w-5 h-5 text-danger" strokeWidth={1.9} />}
             title={<span className="text-danger">Logout</span>}
             onClick={signOut}
           />
+          <ListRow
+            icon={<Trash2 className="w-5 h-5 text-danger" strokeWidth={1.9} />}
+            title={<span className="text-danger">Delete Account</span>}
+            subtitle="Permanently removes all data"
+            onClick={() => setDeleteAccountOpen(true)}
+          />
         </div>
       </AppScreen>
 
       {profileOpen && (
-        <ProfileSheet profile={profile} onClose={() => setProfileOpen(false)} onSave={saveProfile} />
+        <ProfileSheet
+          profile={profile}
+          units={units}
+          onClose={() => setProfileOpen(false)}
+          onSave={saveProfile}
+        />
       )}
       {goalOpen && (
-        <GoalSheet profile={profile} goal={goal} onClose={() => setGoalOpen(false)} onSave={saveGoal} />
+        <GoalSheet
+          profile={profile}
+          goal={goal}
+          units={units}
+          onClose={() => setGoalOpen(false)}
+          onSave={saveGoal}
+        />
+      )}
+      {weightOpen && (
+        <LogWeightSheet
+          currentKg={profile.weightKg}
+          units={units}
+          onClose={() => setWeightOpen(false)}
+          onSave={saveWeight}
+        />
+      )}
+      {deleteAccountOpen && (
+        <DeleteAccountSheet
+          onClose={() => setDeleteAccountOpen(false)}
+          onConfirm={async (password) => {
+            await deleteAccount(password);
+            // Auth state change triggers App.jsx to unmount the app automatically.
+          }}
+        />
       )}
     </>
   );
