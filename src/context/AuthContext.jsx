@@ -3,8 +3,12 @@ import {
   onAuthStateChanged,
   signOut as fbSignOut,
   signInWithPopup,
-  GoogleAuthProvider,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
   reauthenticateWithPopup,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
+  GoogleAuthProvider,
   deleteUser,
 } from 'firebase/auth';
 import { doc, deleteDoc } from 'firebase/firestore';
@@ -26,21 +30,40 @@ export function AuthProvider({ children }) {
     });
   }, []);
 
-  /** Sign in (or sign up) with a Google popup. */
+  /** Sign in with a Google popup. */
   const signInWithGoogle = () => signInWithPopup(auth, googleProvider);
+
+  /** Sign in with email + password. */
+  const signIn = (email, password) =>
+    signInWithEmailAndPassword(auth, email, password);
+
+  /** Create a new account with email + password. */
+  const signUp = (email, password) =>
+    createUserWithEmailAndPassword(auth, email, password);
 
   const signOut = () => fbSignOut(auth);
 
   /**
    * Permanently delete the account.
-   * Re-authenticates via Google popup (Firebase requires recent sign-in for
-   * destructive ops). Deletes Firestore data before removing the Auth user
-   * so that security rules still apply during the Firestore delete.
+   * Re-authenticates via the provider that was used to sign in.
+   * For Google users → popup re-auth. For email/password → credential re-auth.
+   * Deletes Firestore data before removing the Auth user.
    */
-  const deleteAccount = async () => {
+  const deleteAccount = async (password) => {
     const currentUser = auth.currentUser;
     if (!currentUser) throw new Error('Not signed in');
-    await reauthenticateWithPopup(currentUser, googleProvider);
+
+    const isGoogle = currentUser.providerData.some(
+      (p) => p.providerId === 'google.com',
+    );
+
+    if (isGoogle) {
+      await reauthenticateWithPopup(currentUser, googleProvider);
+    } else {
+      const cred = EmailAuthProvider.credential(currentUser.email, password);
+      await reauthenticateWithCredential(currentUser, cred);
+    }
+
     await deleteDoc(doc(db, 'users', currentUser.uid, 'data', 'fitlog'));
     await deleteUser(currentUser);
   };
@@ -52,6 +75,8 @@ export function AuthProvider({ children }) {
         loading,
         isAuthenticated: !!user,
         signInWithGoogle,
+        signIn,
+        signUp,
         signOut,
         deleteAccount,
       }}

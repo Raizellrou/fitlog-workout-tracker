@@ -277,22 +277,25 @@ function LogWeightSheet({ currentKg, units, onClose, onSave }) {
 }
 
 // ── Delete Account sheet ─────────────────────────────────────────────────────
-function DeleteAccountSheet({ onClose, onConfirm }) {
+function DeleteAccountSheet({ isGoogle, onClose, onConfirm }) {
   const { showToast } = useToast();
+  const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
 
   const confirm = async () => {
+    if (!isGoogle && !password) return showToast('Enter your password to confirm');
     setBusy(true);
     try {
-      await onConfirm();
+      await onConfirm(isGoogle ? undefined : password);
     } catch (err) {
-      if (err.code !== 'auth/popup-closed-by-user') {
-        showToast(
-          err.code === 'auth/too-many-requests'
+      if (err.code === 'auth/popup-closed-by-user') { setBusy(false); return; }
+      showToast(
+        err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential'
+          ? 'Incorrect password.'
+          : err.code === 'auth/too-many-requests'
             ? 'Too many attempts — try again later.'
             : 'Could not delete account. Try again.',
-        );
-      }
+      );
     } finally {
       setBusy(false);
     }
@@ -316,10 +319,26 @@ function DeleteAccountSheet({ onClose, onConfirm }) {
         This permanently deletes your account and all synced data. This action
         cannot be undone.
       </div>
-      <p className="text-[13px] text-muted">
-        You will be asked to sign in with Google to confirm your identity before
-        the deletion proceeds.
-      </p>
+      {isGoogle ? (
+        <p className="text-[13px] text-muted">
+          You will be asked to sign in with Google to confirm your identity before
+          the deletion proceeds.
+        </p>
+      ) : (
+        <>
+          <label className="block text-[13px] font-medium text-muted mb-2">
+            Enter your password to confirm
+          </label>
+          <input
+            className="w-full rounded-xl bg-surface-2 border border-white/5 px-4 py-3 text-[15px] text-ink outline-none placeholder:text-faint focus:border-danger/50 transition-colors"
+            type="password"
+            placeholder="Password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </>
+      )}
     </BottomSheet>
   );
 }
@@ -597,9 +616,10 @@ export default function SettingsScreen({ state, update }) {
       )}
       {deleteAccountOpen && (
         <DeleteAccountSheet
+          isGoogle={user?.providerData?.some((p) => p.providerId === 'google.com')}
           onClose={() => setDeleteAccountOpen(false)}
-          onConfirm={async () => {
-            await deleteAccount();
+          onConfirm={async (pw) => {
+            await deleteAccount(pw);
           }}
         />
       )}
