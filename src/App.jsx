@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import BottomTabBar from '@/components/ui/BottomTabBar';
 import SignIn from '@/components/SignIn';
-import EmailVerification from '@/components/EmailVerification';
 import DashboardScreen from '@/screens/DashboardScreen';
 import ExerciseScreen from '@/screens/ExerciseScreen';
 import NutritionScreen from '@/screens/NutritionScreen';
@@ -54,10 +53,6 @@ export default function App() {
   }
 
   if (!isAuthenticated) return <SignIn />;
-
-  // Firestore rules require email_verified — gate here to show a friendly screen
-  // rather than silent permission errors.
-  if (!user?.emailVerified) return <EmailVerification />;
 
   return (
     <>

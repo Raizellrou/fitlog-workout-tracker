@@ -26,11 +26,10 @@ service cloud.firestore {
 
   // ── Helper functions ──────────────────────────────────────────────────────
 
-  /** Caller must be the document's owner AND have a verified email address. */
+  /** Caller must be the authenticated document owner. */
   function isVerifiedOwner(userId) {
     return request.auth != null
-        && request.auth.uid == userId
-        && request.auth.token.email_verified == true;
+        && request.auth.uid == userId;
   }
 
   /**

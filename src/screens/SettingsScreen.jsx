@@ -279,22 +279,20 @@ function LogWeightSheet({ currentKg, units, onClose, onSave }) {
 // ── Delete Account sheet ─────────────────────────────────────────────────────
 function DeleteAccountSheet({ onClose, onConfirm }) {
   const { showToast } = useToast();
-  const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
 
   const confirm = async () => {
-    if (!password) return showToast('Enter your password to confirm');
     setBusy(true);
     try {
-      await onConfirm(password);
+      await onConfirm();
     } catch (err) {
-      const msg =
-        err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential'
-          ? 'Incorrect password.'
-          : err.code === 'auth/too-many-requests'
-          ? 'Too many attempts — try again later.'
-          : 'Could not delete account. Try again.';
-      showToast(msg);
+      if (err.code !== 'auth/popup-closed-by-user') {
+        showToast(
+          err.code === 'auth/too-many-requests'
+            ? 'Too many attempts — try again later.'
+            : 'Could not delete account. Try again.',
+        );
+      }
     } finally {
       setBusy(false);
     }
@@ -318,21 +316,10 @@ function DeleteAccountSheet({ onClose, onConfirm }) {
         This permanently deletes your account and all synced data. This action
         cannot be undone.
       </div>
-      <label className="block text-[13px] font-medium text-muted mb-2">
-        Confirm with your password
-      </label>
-      <div className="flex items-center rounded-xl bg-surface-2 border border-white/5 px-3.5 focus-within:border-danger/50 transition-colors">
-        <input
-          className="w-full bg-transparent py-3 text-[15px] text-ink outline-none"
-          type="password"
-          placeholder="••••••••"
-          // eslint-disable-next-line jsx-a11y/no-autofocus
-          autoFocus
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          disabled={busy}
-        />
-      </div>
+      <p className="text-[13px] text-muted">
+        You will be asked to sign in with Google to confirm your identity before
+        the deletion proceeds.
+      </p>
     </BottomSheet>
   );
 }
@@ -611,9 +598,8 @@ export default function SettingsScreen({ state, update }) {
       {deleteAccountOpen && (
         <DeleteAccountSheet
           onClose={() => setDeleteAccountOpen(false)}
-          onConfirm={async (password) => {
-            await deleteAccount(password);
-            // Auth state change triggers App.jsx to unmount the app automatically.
+          onConfirm={async () => {
+            await deleteAccount();
           }}
         />
       )}
