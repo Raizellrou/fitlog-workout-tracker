@@ -98,6 +98,11 @@ export function emptyState() {
     weightLog: [],           // [{ id, date: ISO, kg }] — append-only, newest entry feeds profile
     units: 'metric',         // 'metric' | 'imperial' — display preference (storage always metric)
     notificationsEnabled: false, // true once the user grants browser Notification permission
+    mealTemplates: [],       // saved meal templates for meal prep
+    exerciseTemplates: [],   // saved exercise templates for quick add
+    workoutSplits: [],       // named split programs (PPL, Upper/Lower, etc.)
+    activeSplitId: null,     // ID of the currently active split, or null
+    mealDays: [],            // ISO dates on which ≥1 meal was logged (capped 30)
   };
 }
 
@@ -187,6 +192,34 @@ export function makeMeal(type) {
     emoji: MEAL_EMOJIS[type],
     loggedAt: Date.now(),
     foods: [],
+  };
+}
+
+export function makeMealTemplate(meal, name) {
+  return {
+    id: crypto.randomUUID(),
+    name,
+    emoji: meal.emoji,
+    type: meal.type,
+    foods: structuredClone(meal.foods),
+  };
+}
+
+export function makeExerciseTemplate(exercise) {
+  return {
+    id: crypto.randomUUID(),
+    name: exercise.name,
+    muscleGroup: exercise.muscleGroup,
+    defaultSets: exercise.sets.map(({ reps, weight }) => ({ reps, weight })),
+  };
+}
+
+export function exerciseFromTemplate(template) {
+  return {
+    id: crypto.randomUUID(),
+    name: template.name,
+    muscleGroup: template.muscleGroup,
+    sets: template.defaultSets.map(({ reps, weight }) => ({ reps, weight, done: false })),
   };
 }
 
@@ -393,6 +426,80 @@ export function macroPercents({ p = 0, c = 0, f = 0 } = {}) {
 }
 
 // ─────────────────────────────────────────────
+// ── WORKOUT SPLITS ──
+// ─────────────────────────────────────────────
+
+export const WEEKDAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+export const WEEKDAY_LABELS = {
+  mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday',
+  fri: 'Friday', sat: 'Saturday', sun: 'Sunday',
+};
+
+export const WEEKDAY_SHORT = {
+  mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu',
+  fri: 'Fri', sat: 'Sat', sun: 'Sun',
+};
+
+/** Factory for an empty (rest) split day. */
+export function makeSplitDay() {
+  return { isRest: true, label: 'Rest', exercises: [] };
+}
+
+/** Factory for a new empty split (all days default to rest). */
+export function makeSplit(name) {
+  return {
+    id: crypto.randomUUID(),
+    name,
+    days: Object.fromEntries(WEEKDAY_KEYS.map((k) => [k, makeSplitDay()])),
+  };
+}
+
+/** Convert an ISO date string to a weekday key (mon–sun). */
+export function isoToWeekdayKey(isoDate) {
+  const d = new Date(isoDate + 'T00:00:00');
+  return ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][d.getDay()];
+}
+
+/** Get the split day configuration for today (or a given ISO date). */
+export function splitDayForToday(split, todayIso) {
+  const key = isoToWeekdayKey(todayIso);
+  return split.days[key] ?? makeSplitDay();
+}
+
+/** Create live exercise objects from a split day's exercise templates. */
+export function exercisesFromSplitDay(splitDay) {
+  return (splitDay.exercises ?? []).map((ex) => ({
+    id: crypto.randomUUID(),
+    name: ex.name,
+    muscleGroup: ex.muscleGroup,
+    sets: (ex.defaultSets?.length > 0
+      ? ex.defaultSets
+      : [{ reps: '', weight: '' }]
+    ).map((s) => ({ reps: s.reps ?? '', weight: s.weight ?? '', done: false })),
+  }));
+}
+
+/** Count workout (non-rest) days in a split. */
+export function splitWorkoutDays(split) {
+  return Object.values(split.days).filter((d) => !d.isRest).length;
+}
+
+/** Get the next workout day after today in a split, cycling through the week. */
+export function nextSplitWorkoutDay(split, todayIso) {
+  const todayKey = isoToWeekdayKey(todayIso);
+  const todayIdx = WEEKDAY_KEYS.indexOf(todayKey);
+  for (let i = 1; i <= 7; i++) {
+    const key = WEEKDAY_KEYS[(todayIdx + i) % 7];
+    const day = split.days[key];
+    if (!day.isRest && day.exercises.length > 0) {
+      return { key, label: day.label || WEEKDAY_LABELS[key] };
+    }
+  }
+  return null;
+}
+
+// ─────────────────────────────────────────────
 // ── CONSISTENCY SCORE ──
 // ─────────────────────────────────────────────
 
@@ -400,55 +507,101 @@ export function macroPercents({ p = 0, c = 0, f = 0 } = {}) {
 const IDEAL_WORKOUTS_PER_WEEK = 4;
 
 /**
- * Balanced Consistency Score (0–100) blending four pillars:
+ * Balanced Consistency Score (0–100) blending six pillars + decay:
  *
- *  50% — Workout frequency: active days in the last 28, ideal = 4/week (16 total)
- *  25% — Streak:            current streak normalised to a 30-day ceiling
- *  15% — Recovery:          proportion of trained muscle groups NOT in "needs_rest"
- *  10% — Cardio:            sessions in the last 7 days, ideal = 2
+ *  30% — Workout frequency (50% when no active split)
+ *  20% — Streak
+ *  10% — Recovery adherence
+ *   5% — Cardio
+ *  15% — Nutrition consistency (NEW)
+ *  20% — Split adherence (NEW — redistributed to frequency when no split)
  *
- * All four components are 0–100 before blending, so the weights are transparent.
+ * Decay: −5 per day past 2 days since last workout (capped at −25).
  */
 export function consistencyScore(state) {
   const history          = state.history          ?? [];
   const streak           = state.streak           ?? 0;
   const cardioSessions   = state.cardioSessions   ?? [];
   const muscleGrpHistory = state.muscleGroupHistory ?? {};
+  const mealDays         = state.mealDays         ?? [];
+  const workoutSplits    = state.workoutSplits    ?? [];
+  const activeSplitId    = state.activeSplitId    ?? null;
 
-  // 1. Frequency (50 %)
+  // 1. Frequency (30 % base, 50 % if no active split)
   const IDEAL_28 = IDEAL_WORKOUTS_PER_WEEK * 4;
   const days28   = activeDays(history, 28);
   const freqScore = Math.min(100, Math.round((days28 / IDEAL_28) * 100));
 
-  // 2. Streak (25 %) — 30-day streak = 100
+  // 2. Streak (20 %) — 30-day streak = 100
   const streakScore = Math.min(100, Math.round((Math.min(streak, 30) / 30) * 100));
 
-  // 3. Recovery adherence (15 %) — no overtrained ("needs_rest") muscle groups
+  // 3. Recovery adherence (10 %)
   const statuses    = Object.values(muscleGroupStatuses(muscleGrpHistory));
-  const trained     = statuses.filter((s) => s !== 'ready'); // groups that have been worked
+  const trained     = statuses.filter((s) => s !== 'ready');
   const recoveryScore =
     trained.length === 0
-      ? 100 // no muscles worked yet → no violations
+      ? 100
       : Math.round(
           (trained.filter((s) => s !== 'needs_rest').length / trained.length) * 100,
         );
 
-  // 4. Cardio (10 %) — 2 sessions/week = 100
+  // 4. Cardio (5 %) — 2 sessions/week = 100
   const { sessions: cardioWeek } = weeklyCardioStats(cardioSessions);
   const cardioScore = Math.min(100, Math.round((cardioWeek / 2) * 100));
 
-  return Math.max(
-    0,
-    Math.min(
-      100,
-      Math.round(
-        0.50 * freqScore +
-        0.25 * streakScore +
-        0.15 * recoveryScore +
-        0.10 * cardioScore,
-      ),
-    ),
+  // 5. Nutrition consistency (15 %) — days with ≥1 meal in last 7
+  const weekAgoIso = isoOffset(new Date(TODAY + 'T00:00:00'), -6);
+  const recentMealDays = mealDays.filter((d) => d >= weekAgoIso && d <= TODAY);
+  const nutritionScore = Math.min(100, Math.round((recentMealDays.length / 7) * 100));
+
+  // 6. Split adherence (20 %) — redistributed to frequency if no active split
+  const activeSplit = activeSplitId
+    ? workoutSplits.find((sp) => sp.id === activeSplitId) ?? null
+    : null;
+
+  let splitScore = 0;
+  if (activeSplit) {
+    const todayDate = new Date(TODAY + 'T00:00:00');
+    let scheduled = 0;
+    let completed = 0;
+    const historyDates = new Set(history.map((h) => h.date));
+    for (let i = 0; i < 14; i++) {
+      const iso = isoOffset(todayDate, -i);
+      const key = isoToWeekdayKey(iso);
+      const day = activeSplit.days[key];
+      if (day && !day.isRest) {
+        scheduled++;
+        if (historyDates.has(iso)) completed++;
+      }
+    }
+    splitScore = scheduled > 0
+      ? Math.min(100, Math.round((completed / scheduled) * 100))
+      : 100;
+  }
+
+  const freqWeight  = activeSplit ? 0.30 : 0.50;
+  const splitWeight = activeSplit ? 0.20 : 0;
+
+  const blended = Math.round(
+    freqWeight  * freqScore +
+    0.20 * streakScore +
+    0.10 * recoveryScore +
+    0.05 * cardioScore +
+    0.15 * nutritionScore +
+    splitWeight * splitScore,
   );
+
+  // Decay penalty: −5 per day past 2 days since last workout (max −25)
+  const lastIso = lastWorkoutIso(history);
+  let decay = 0;
+  if (lastIso) {
+    const daysSince = Math.floor(
+      (new Date(TODAY + 'T00:00:00') - new Date(lastIso + 'T00:00:00')) / 86_400_000,
+    );
+    if (daysSince > 2) decay = Math.min(25, 5 * (daysSince - 2));
+  }
+
+  return Math.max(0, Math.min(100, blended - decay));
 }
 
 /**

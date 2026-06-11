@@ -46,6 +46,69 @@ export function previewState() {
       { id: 'c1', date: '2026-06-02', type: 'run', distanceKm: 5, durationMin: 26, pace: 5.2, calories: 364, notes: '' },
     ],
     customFoods: [],
+    mealTemplates: [
+      {
+        id: 'mt1', name: 'Chicken & Rice Prep', emoji: '☀️', type: 'Lunch',
+        foods: [
+          { id: 'mtf1', name: 'Chicken Breast', grams: 200, foodId: 'f1', variantLabel: 'default', cal: 330, p: 62, c: 0, f: 7.2 },
+          { id: 'mtf2', name: 'White Rice', grams: 150, foodId: 'f2', variantLabel: 'default', cal: 195, p: 4, c: 43, f: 0.4 },
+        ],
+      },
+    ],
+    exerciseTemplates: [
+      { id: 'et1', name: 'Bench Press', muscleGroup: 'chest', defaultSets: [{ reps: '10', weight: '80' }, { reps: '10', weight: '80' }, { reps: '8', weight: '85' }, { reps: '6', weight: '90' }] },
+      { id: 'et2', name: 'Barbell Squat', muscleGroup: 'legs', defaultSets: [{ reps: '8', weight: '100' }, { reps: '8', weight: '100' }, { reps: '6', weight: '110' }] },
+    ],
+    workoutSplits: [
+      {
+        id: 'sp1',
+        name: 'Push Pull Legs',
+        days: {
+          mon: {
+            isRest: false, label: 'Push Day',
+            exercises: [
+              { name: 'Bench Press', muscleGroup: 'chest', defaultSets: [{ reps: '10', weight: '80' }, { reps: '10', weight: '80' }, { reps: '8', weight: '85' }, { reps: '6', weight: '90' }] },
+              { name: 'Overhead Press', muscleGroup: 'shoulders', defaultSets: [{ reps: '10', weight: '25' }, { reps: '10', weight: '25' }, { reps: '8', weight: '30' }] },
+              { name: 'Tricep Pushdown', muscleGroup: 'triceps', defaultSets: [{ reps: '12', weight: '20' }, { reps: '12', weight: '20' }, { reps: '10', weight: '25' }] },
+            ],
+          },
+          tue: {
+            isRest: false, label: 'Pull Day',
+            exercises: [
+              { name: 'Barbell Row', muscleGroup: 'back', defaultSets: [{ reps: '10', weight: '70' }, { reps: '10', weight: '70' }, { reps: '8', weight: '75' }] },
+              { name: 'Pull-Ups', muscleGroup: 'back', defaultSets: [{ reps: '8', weight: '0' }, { reps: '8', weight: '0' }, { reps: '6', weight: '0' }] },
+              { name: 'Bicep Curl', muscleGroup: 'biceps', defaultSets: [{ reps: '12', weight: '14' }, { reps: '12', weight: '14' }, { reps: '10', weight: '16' }] },
+            ],
+          },
+          wed: {
+            isRest: false, label: 'Leg Day',
+            exercises: [
+              { name: 'Barbell Squat', muscleGroup: 'legs', defaultSets: [{ reps: '8', weight: '100' }, { reps: '8', weight: '100' }, { reps: '6', weight: '110' }] },
+              { name: 'Leg Press', muscleGroup: 'legs', defaultSets: [{ reps: '10', weight: '150' }, { reps: '10', weight: '150' }, { reps: '8', weight: '170' }] },
+              { name: 'Calf Raise', muscleGroup: 'calves', defaultSets: [{ reps: '15', weight: '40' }, { reps: '15', weight: '40' }, { reps: '12', weight: '50' }] },
+            ],
+          },
+          thu: { isRest: true, label: 'Rest', exercises: [] },
+          fri: {
+            isRest: false, label: 'Push Day',
+            exercises: [
+              { name: 'Bench Press', muscleGroup: 'chest', defaultSets: [{ reps: '10', weight: '80' }, { reps: '10', weight: '80' }, { reps: '8', weight: '85' }] },
+              { name: 'Overhead Press', muscleGroup: 'shoulders', defaultSets: [{ reps: '10', weight: '25' }, { reps: '10', weight: '25' }] },
+            ],
+          },
+          sat: {
+            isRest: false, label: 'Pull Day',
+            exercises: [
+              { name: 'Barbell Row', muscleGroup: 'back', defaultSets: [{ reps: '10', weight: '70' }, { reps: '8', weight: '75' }] },
+              { name: 'Pull-Ups', muscleGroup: 'back', defaultSets: [{ reps: '8', weight: '0' }, { reps: '6', weight: '0' }] },
+            ],
+          },
+          sun: { isRest: true, label: 'Rest', exercises: [] },
+        },
+      },
+    ],
+    activeSplitId: 'sp1',
+    mealDays: ['2026-06-01', '2026-06-02', '2026-06-03', '2026-06-04'],
     profile: { sex: 'male', age: 28, heightCm: 180, weightKg: 78.5, activityLevel: 'moderate' },
     goal: { type: 'lean_bulk', targetWeightKg: 82, proteinPerLb: 1.0 },
   };

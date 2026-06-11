@@ -54,21 +54,28 @@ Security rules in `firestore.rules`: email-verified owner only, field allow-list
   exercises: Exercise[],       // working set — cleared daily
   meals: Meal[],               // working set — cleared daily
   activeDate: ISO | null,      // day the working set belongs to
-  history: Session[],          // persisted workout history (capped ≤500 on Firestore write)
+  history: Session[],          // persisted workout history (capped ≤500)
   streak: number,
   lastWorkoutDate: ISO | null,
   muscleGroupHistory: { [group]: ISO },
-  cardioSessions: CardioSession[],  // capped ≤500 on Firestore write
+  cardioSessions: CardioSession[],  // capped ≤500
   customFoods: Food[],         // user-defined, persisted across days
-  profile: { sex, age, heightCm, weightKg, activityLevel },  // body metrics
-  goal: { type, targetWeightKg, proteinPerLb },              // drives macro targets
-  weightLog: [{ id, date, kg }],    // body-weight entries (capped ≤365 on Firestore write)
+  profile: { sex, age, heightCm, weightKg, activityLevel },
+  goal: { type, targetWeightKg, proteinPerLb },
+  weightLog: [{ id, date, kg }],    // capped ≤365
   units: 'metric' | 'imperial',     // display preference — storage always metric
-  notificationsEnabled: boolean,     // true after Notification permission granted + toggled on
+  notificationsEnabled: boolean,
+  mealTemplates: MealTemplate[],       // saved meal presets (capped ≤50)
+  exerciseTemplates: ExerciseTemplate[], // saved exercise presets (capped ≤100)
+  workoutSplits: Split[],             // workout programs with per-day exercises (capped ≤10)
+  activeSplitId: string | null,       // currently active split program
 }
 ```
 
-A `Meal` is a container: `{ id, type, emoji, loggedAt, foods: FoodItem[] }`. Macros are never stored on the meal itself — always derived via `mealMacros(meal)`.
+A `Meal` is `{ id, type, emoji, loggedAt, foods: FoodItem[] }`. Macros derived via `mealMacros(meal)`, never stored.
+A `MealTemplate` is `{ id, name, emoji, type, foods: FoodItem[] }`.
+An `ExerciseTemplate` is `{ id, name, muscleGroup, defaultSets: [{ reps, weight }] }`.
+A `Split` is `{ id, name, days: { mon..sun: SplitDay } }` where `SplitDay` is `{ isRest, label, exercises: [{ name, muscleGroup, defaultSets }] }`.
 
 `readCache()` merges over `emptyState()` (`{ ...emptyState(), ...cached }`) so docs saved before a field existed still get sane defaults — always add new state fields to `emptyState()`.
 
@@ -90,9 +97,9 @@ src/
 │   ├── foodData.js             # Static USDA-seeded food table (~80 foods + variants)
 │   └── format.js               # Date/number formatting + unit conversion helpers (kgToLb, cmToFtIn, …)
 ├── components/
-│   ├── SignIn.jsx              # Email/password sign-in + sign-up form (generic error messages)
-│   ├── EmailVerification.jsx   # Post-sign-up email verification gate (resend + reload)
-│   └── ui/                    # 16 shared design-system primitives (see below)
+│   ├── SignIn.jsx              # Email/password sign-in + sign-up form
+│   ├── EmailVerification.jsx   # Post-sign-up email verification gate
+│   └── ui/                    # 17 shared design-system primitives (see below)
 └── screens/
     ├── DashboardScreen.jsx     # Hero card, Consistency Score, intake, notices
     ├── ExerciseScreen.jsx      # Weekly streak, grouped exercises, Log Workout, Cardio
@@ -120,6 +127,7 @@ All screens are built exclusively from these primitives — no one-off card/row 
 | `ListRow` | Icon tile + title + subtitle + trailing slot |
 | `DayStreakCell` | Vertical day pill: `done` / `today` / `empty` |
 | `Toggle` | Violet on-state switch |
+| `ConfirmSheet` | Destructive-action confirmation modal (wraps BottomSheet, Cancel + Delete buttons) |
 | `BottomSheet` | Slide-up modal shell: drag handle + header + scroll body + sticky footer (`z-[200]`, above the nav) |
 | `BottomTabBar` | 4-tab nav (Dashboard · Exercise · Food · Settings). **Fixed** floating glass bar (`fixed bottom-0`, centered to the 480px column, `z-40`); `<main>` carries `padding-bottom: var(--nav-height)` so content clears it |
 
@@ -176,6 +184,14 @@ Consumers: Dashboard intake card + weight-to-goal notice, Nutrition `ArcGauge`, 
 | `consistencyTrend(state, weeks)` | Per-week frequency scores (oldest → newest), last entry = live full score |
 | `latestWeightEntry(weightLog)` | Most recent `{ id, date, kg }` entry, or `null` |
 | `weightDelta(weightLog)` | kg diff between the two most recent entries, or `null` |
+| `makeMealTemplate(meal, name)` | Creates a meal template from a logged meal |
+| `makeExerciseTemplate(exercise)` | Creates an exercise template (strips `done` from sets) |
+| `exerciseFromTemplate(template)` | Creates a live exercise from a template (new ID, `done: false`) |
+| `makeSplit(name)` | Factory for a workout split (7 days, all rest by default) |
+| `splitDayForToday(split, todayIso)` | Returns the SplitDay for today's weekday |
+| `exercisesFromSplitDay(splitDay)` | Creates live exercises from a split day's exercise list |
+| `splitWorkoutDays(split)` | Count of non-rest days in a split |
+| `nextSplitWorkoutDay(split, todayIso)` | Next non-rest day label (cycles through 7 days) |
 
 ## Key Conventions
 
@@ -188,14 +204,26 @@ Consumers: Dashboard intake card + weight-to-goal notice, Nutrition `ArcGauge`, 
 - Storage is always metric (kg / cm). Imperial display is a view-only conversion controlled by `state.units`.
 - `useFitlogData` trims arrays before Firestore writes (`trimForFirestore`) to stay within the 1 MiB doc limit.
 - Email verification is required — unverified users see `EmailVerification.jsx` and are blocked by Firestore rules.
+- Delete actions always go through `ConfirmSheet` for user confirmation.
+- Workout splits use `sessionStorage` stamp (`${activeSplitId}_${today}`) to prevent re-triggering auto-populate.
+- New Firestore fields MUST be added to the allow-list in `firestore.rules` or writes silently fail.
 
 ## Build roadmap
 
-`PROGRESS.md` (repo root) tracks the phased build. **All phases complete (0–6):** sticky nav, profile, goals + macro engine, body-weight log, Consistency Score, extras (units, custom food, notifications, workout timer), and security hardening (Firestore rules, email verification, security headers, account deletion, data export, doc-size trimming).
+`PROGRESS.md` tracks the original phased build (Phases 0-6, all complete). `TODO.md` tracks the feature expansion:
 
-Remaining ops items (not blocking): Firebase App Check (needs Console access), dependency hygiene (Dependabot), billing budgets.
+| Phase | Feature | Status |
+|-------|---------|--------|
+| 1 | Delete with confirmation (`ConfirmSheet`) | Done |
+| 2 | Custom meal templates | Done |
+| 3 | Custom exercise templates | Done |
+| 4 | Workout splits (programs, auto-populate, rest days) | Done |
+| 5 | Consistency Score revamp (nutrition + split adherence + decay) | Pending |
+| 6 | Username + public profile | Pending |
+| 7 | Friends system | Pending |
+| 8 | Ranking tab + push notifications | Pending |
 
-`preview.html` + `src/preview/` are a **dev-only** UI harness (mock data, no Firebase/auth) for fast visual iteration — not shipped by the production build.
+`preview.html` + `src/preview/` are a **dev-only** UI harness (mock data, no Firebase/auth) — not shipped by the production build.
 
 ## Deploy (Vercel)
 

@@ -49,7 +49,10 @@ service cloud.firestore {
       'sessionName', 'exercises', 'meals', 'activeDate',
       'history', 'streak', 'lastWorkoutDate', 'muscleGroupHistory',
       'cardioSessions', 'customFoods', 'profile', 'goal', 'weightLog',
-      'units', 'notificationsEnabled'
+      'units', 'notificationsEnabled',
+      'mealTemplates', 'exerciseTemplates',
+      'workoutSplits', 'activeSplitId',
+      'mealDays'
     ];
 
     // ── 2. Scalar type + length guards ──────────────────────────────────────
@@ -59,7 +62,8 @@ service cloud.firestore {
       && (!('units'                in d) || d.units in ['metric', 'imperial'])
       && (!('notificationsEnabled' in d) || d.notificationsEnabled is bool)
       && (!('activeDate'           in d) || d.activeDate == null || d.activeDate is string)
-      && (!('lastWorkoutDate'      in d) || d.lastWorkoutDate == null || d.lastWorkoutDate is string);
+      && (!('lastWorkoutDate'      in d) || d.lastWorkoutDate == null || d.lastWorkoutDate is string)
+      && (!('activeSplitId'        in d) || d.activeSplitId == null || d.activeSplitId is string);
 
     // ── 3. Array size guards ─────────────────────────────────────────────────
     let arraysOk =
@@ -68,7 +72,11 @@ service cloud.firestore {
       && (!('meals'          in d) || (d.meals          is list && d.meals.size()          <= 20))
       && (!('cardioSessions' in d) || (d.cardioSessions is list && d.cardioSessions.size() <= 500))
       && (!('weightLog'      in d) || (d.weightLog      is list && d.weightLog.size()      <= 365))
-      && (!('customFoods'    in d) || (d.customFoods    is list && d.customFoods.size()    <= 200));
+      && (!('customFoods'    in d) || (d.customFoods    is list && d.customFoods.size()    <= 200))
+      && (!('mealTemplates'     in d) || (d.mealTemplates     is list && d.mealTemplates.size()     <= 50))
+      && (!('exerciseTemplates' in d) || (d.exerciseTemplates is list && d.exerciseTemplates.size() <= 100))
+      && (!('workoutSplits'    in d) || (d.workoutSplits    is list && d.workoutSplits.size()    <= 10))
+      && (!('mealDays'         in d) || (d.mealDays         is list && d.mealDays.size()         <= 30));
 
     return d.keys().hasOnly(allowed) && scalarsOk && arraysOk;
   }

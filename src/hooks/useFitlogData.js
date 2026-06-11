@@ -36,9 +36,13 @@ function writeCache(state) {
 function trimForFirestore(s) {
   return {
     ...s,
-    history:        (s.history        ?? []).slice(0, 500),
-    cardioSessions: (s.cardioSessions  ?? []).slice(0, 500),
-    weightLog:      (s.weightLog       ?? []).slice(-365),
+    history:            (s.history            ?? []).slice(0, 500),
+    cardioSessions:     (s.cardioSessions    ?? []).slice(0, 500),
+    weightLog:          (s.weightLog         ?? []).slice(-365),
+    mealTemplates:      (s.mealTemplates     ?? []).slice(0, 50),
+    exerciseTemplates:  (s.exerciseTemplates ?? []).slice(0, 100),
+    workoutSplits:      (s.workoutSplits    ?? []).slice(0, 10),
+    mealDays:           (s.mealDays        ?? []).slice(-30),
   };
 }
 

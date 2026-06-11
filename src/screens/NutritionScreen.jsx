@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Coffee, Salad, Fish, Apple, Search, X, Trash2, PlusCircle } from 'lucide-react';
+import { Coffee, Salad, Fish, Apple, Search, X, Trash2, PlusCircle, Bookmark } from 'lucide-react';
 import AppScreen from '@/components/ui/AppScreen';
 import TopBar from '@/components/ui/TopBar';
 import Card from '@/components/ui/Card';
@@ -7,9 +7,12 @@ import ListRow from '@/components/ui/ListRow';
 import MacroRow from '@/components/ui/MacroRow';
 import ArcGauge from '@/components/ui/ArcGauge';
 import BottomSheet from '@/components/ui/BottomSheet';
+import ConfirmSheet from '@/components/ui/ConfirmSheet';
+import GradientButton from '@/components/ui/GradientButton';
 import FAB from '@/components/ui/FAB';
 import { useToast } from '@/context/ToastContext';
 import { useFoodSearch } from '@/hooks/useFoodSearch';
+import { TODAY } from '@/lib/format';
 import {
   MEAL_TYPES,
   macroTotals,
@@ -17,6 +20,7 @@ import {
   macroPercents,
   scaleMacros,
   makeMeal,
+  makeMealTemplate,
   computeNutritionTargets,
 } from '@/lib/fitlog';
 
@@ -110,8 +114,46 @@ function CreateFoodSheet({ seedName, onClose, onSave }) {
   );
 }
 
+// ── Save as Template name prompt ────────────────────────────────────────────
+function SaveTemplateSheet({ meal, onClose, onSave }) {
+  const { showToast } = useToast();
+  const [name, setName] = useState('');
+
+  const save = () => {
+    if (!name.trim()) return showToast('Enter a template name');
+    onSave(makeMealTemplate(meal, name.trim()));
+  };
+
+  return (
+    <BottomSheet
+      title="Save as Template"
+      onClose={onClose}
+      footer={<GradientButton onClick={save}>Save Template</GradientButton>}
+    >
+      <label className="block text-[13px] font-medium text-muted mb-2">Template name</label>
+      <div className="rounded-xl bg-surface-2 border border-white/5 px-3.5 mb-4 focus-within:border-accent/50 transition-colors">
+        <input
+          className="w-full bg-transparent py-3 text-[15px] text-ink outline-none placeholder:text-faint"
+          placeholder="e.g. Chicken & Rice Prep"
+          autoFocus
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+      </div>
+      <div className="rounded-2xl bg-surface-2 border border-white/5 px-3">
+        {(meal.foods ?? []).map((f) => (
+          <div key={f.id} className="flex items-center justify-between py-2 border-b border-white/5 last:border-0">
+            <span className="text-sm text-ink truncate">{f.name}</span>
+            <span className="text-xs text-muted tnum shrink-0">{f.grams}g · {Math.round(f.cal)} kcal</span>
+          </div>
+        ))}
+      </div>
+    </BottomSheet>
+  );
+}
+
 // ── Add Meal bottom sheet ───────────────────────────────────────────────────
-function AddMealSheet({ onClose, onSave, customFoods, onRequestCreateFood }) {
+function AddMealSheet({ onClose, onSave, customFoods, onRequestCreateFood, mealTemplates, onDeleteTemplate }) {
   const { showToast } = useToast();
   const [mealType, setMealType] = useState('Breakfast');
   const [foods, setFoods] = useState([]);
@@ -191,6 +233,41 @@ function AddMealSheet({ onClose, onSave, customFoods, onRequestCreateFood }) {
             </button>
           ))}
         </div>
+
+        {/* From template */}
+        {mealTemplates.length > 0 && foods.length === 0 && (
+          <div className="mb-4">
+            <div className="text-[13px] font-medium text-muted mb-2">From Template</div>
+            <div className="rounded-2xl bg-surface-2 border border-white/5 overflow-hidden">
+              {mealTemplates.map((t) => {
+                const tCal = (t.foods ?? []).reduce((sum, f) => sum + (f.cal || 0), 0);
+                return (
+                  <div key={t.id} className="flex items-center gap-3 px-3 py-2.5 border-b border-white/5 last:border-0">
+                    <button
+                      onClick={() => {
+                        setMealType(t.type);
+                        setFoods(t.foods.map((f) => ({ ...f, id: crypto.randomUUID() })));
+                      }}
+                      className="flex-1 min-w-0 text-left active:bg-white/5"
+                    >
+                      <div className="text-sm font-medium text-ink truncate">{t.emoji} {t.name}</div>
+                      <div className="text-[11px] text-muted tnum truncate">
+                        {t.foods.length} item{t.foods.length !== 1 ? 's' : ''} · {Math.round(tCal)} kcal
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => onDeleteTemplate(t.id)}
+                      className="text-faint hover:text-danger shrink-0"
+                      aria-label="Delete template"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" strokeWidth={1.9} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Staged foods */}
         {foods.length > 0 && (
@@ -318,11 +395,13 @@ function AddMealSheet({ onClose, onSave, customFoods, onRequestCreateFood }) {
 
 // ── Screen ──────────────────────────────────────────────────────────────────
 export default function NutritionScreen({ state, update }) {
-  const { meals, customFoods = [] } = state;
+  const { meals, customFoods = [], mealTemplates = [] } = state;
   const { showToast } = useToast();
   const [sheetOpen, setSheetOpen] = useState(false);
   const [createFoodOpen, setCreateFoodOpen] = useState(false);
   const [createFoodSeed, setCreateFoodSeed] = useState('');
+  const [deleteMealTarget, setDeleteMealTarget] = useState(null);
+  const [saveTemplateMeal, setSaveTemplateMeal] = useState(null);
 
   const totals = macroTotals(meals);
   const pct = macroPercents(totals);
@@ -330,7 +409,11 @@ export default function NutritionScreen({ state, update }) {
   const calorieGoal = targets?.calories ?? 2400;
 
   const saveMeal = (type, foods) => {
-    update((s) => ({ ...s, meals: [...s.meals, { ...makeMeal(type), foods }] }));
+    update((s) => {
+      const days = [...(s.mealDays ?? [])];
+      if (!days.includes(TODAY)) days.push(TODAY);
+      return { ...s, meals: [...s.meals, { ...makeMeal(type), foods }], mealDays: days.slice(-30) };
+    });
     setSheetOpen(false);
     showToast('Meal logged ✓');
   };
@@ -346,6 +429,17 @@ export default function NutritionScreen({ state, update }) {
     update((s) => ({ ...s, customFoods: [...(s.customFoods ?? []), food] }));
     setCreateFoodOpen(false);
     showToast('Custom food saved ✓');
+  };
+
+  const saveTemplate = (template) => {
+    update((s) => ({ ...s, mealTemplates: [...(s.mealTemplates ?? []), template] }));
+    setSaveTemplateMeal(null);
+    showToast('Template saved ✓');
+  };
+
+  const deleteTemplate = (id) => {
+    update((s) => ({ ...s, mealTemplates: (s.mealTemplates ?? []).filter((t) => t.id !== id) }));
+    showToast('Template deleted');
   };
 
   return (
@@ -396,7 +490,10 @@ export default function NutritionScreen({ state, update }) {
                   trailing={
                     <>
                       <span className="text-sm text-muted tnum">({Math.round(mm.cal)} kcal)</span>
-                      <button onClick={() => deleteMeal(m.id)} className="text-faint hover:text-danger" aria-label="Delete meal">
+                      <button onClick={() => setSaveTemplateMeal(m)} className="text-faint hover:text-accent" aria-label="Save as template">
+                        <Bookmark className="w-4 h-4" strokeWidth={1.9} />
+                      </button>
+                      <button onClick={() => setDeleteMealTarget({ id: m.id, type: m.type })} className="text-faint hover:text-danger" aria-label="Delete meal">
                         <Trash2 className="w-4 h-4" strokeWidth={1.9} />
                       </button>
                     </>
@@ -426,9 +523,18 @@ export default function NutritionScreen({ state, update }) {
       {sheetOpen && (
         <AddMealSheet
           customFoods={customFoods}
+          mealTemplates={mealTemplates}
           onClose={() => setSheetOpen(false)}
           onSave={saveMeal}
           onRequestCreateFood={handleRequestCreateFood}
+          onDeleteTemplate={deleteTemplate}
+        />
+      )}
+      {saveTemplateMeal && (
+        <SaveTemplateSheet
+          meal={saveTemplateMeal}
+          onClose={() => setSaveTemplateMeal(null)}
+          onSave={saveTemplate}
         />
       )}
       {createFoodOpen && (
@@ -436,6 +542,15 @@ export default function NutritionScreen({ state, update }) {
           seedName={createFoodSeed}
           onClose={() => setCreateFoodOpen(false)}
           onSave={saveCustomFood}
+        />
+      )}
+
+      {deleteMealTarget && (
+        <ConfirmSheet
+          title="Delete Meal"
+          message={`Delete this ${deleteMealTarget.type} meal? This can't be undone.`}
+          onConfirm={() => deleteMeal(deleteMealTarget.id)}
+          onClose={() => setDeleteMealTarget(null)}
         />
       )}
     </>
