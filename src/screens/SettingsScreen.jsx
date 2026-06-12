@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Dumbbell, Scale, Target, Bell, Ruler, LogOut, Check, Plus, Trash2, Download,
+  AtSign, Loader2, X,
 } from 'lucide-react';
 import AppScreen from '@/components/ui/AppScreen';
 import TopBar from '@/components/ui/TopBar';
@@ -11,10 +12,12 @@ import BottomSheet from '@/components/ui/BottomSheet';
 import GradientButton from '@/components/ui/GradientButton';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
+import { usePublicProfile } from '@/hooks/usePublicProfile';
 import { formatDuration, TODAY, kgToLb, lbToKg, cmToIn, inToCm, cmToFtIn } from '@/lib/format';
 import {
   SEX_OPTIONS, ACTIVITY_LEVELS, emptyProfile, profileComplete,
   GOAL_TYPES, emptyGoal, computeNutritionTargets, PROTEIN_PER_LB_MIN, PROTEIN_PER_LB_MAX,
+  isValidUsername,
 } from '@/lib/fitlog';
 
 const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -276,6 +279,97 @@ function LogWeightSheet({ currentKg, units, onClose, onSave }) {
   );
 }
 
+// ── Username sheet ──────────────────────────────────────────────────────────
+function UsernameSheet({ currentUsername, currentDisplayName, uid, onClose, onSave }) {
+  const { showToast } = useToast();
+  const { checkUsername, claimUsername, checking, available, setAvailable } =
+    usePublicProfile(uid);
+  const [username, setUsername] = useState(currentUsername ?? '');
+  const [displayName, setDisplayName] = useState(currentDisplayName ?? '');
+  const [saving, setSaving] = useState(false);
+  const debounceRef = useRef(null);
+
+  useEffect(() => {
+    clearTimeout(debounceRef.current);
+    setAvailable(null);
+    const val = username.trim();
+    if (!isValidUsername(val)) return;
+    // Skip check if unchanged
+    if (val === currentUsername) { setAvailable(true); return; }
+    debounceRef.current = setTimeout(() => checkUsername(val), 400);
+    return () => clearTimeout(debounceRef.current);
+  }, [username, checkUsername, setAvailable, currentUsername]);
+
+  const valid = isValidUsername(username.trim());
+
+  const save = async () => {
+    const u = username.trim();
+    const dn = displayName.trim() || u;
+    if (!isValidUsername(u)) return showToast('3–20 chars: letters, numbers, underscores');
+    if (available === false) return showToast('Username is taken');
+
+    setSaving(true);
+    try {
+      await claimUsername(u, dn, currentUsername);
+      onSave(u, dn);
+    } catch (err) {
+      showToast(err.message || 'Could not update username');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <BottomSheet
+      title="Edit Username"
+      onClose={onClose}
+      footer={
+        <GradientButton onClick={save}>
+          {saving ? 'Saving…' : 'Save'}
+        </GradientButton>
+      }
+    >
+      <label className="block text-[13px] font-medium text-muted mb-2">Username</label>
+      <div className="flex items-center rounded-xl bg-surface-2 border border-white/5 px-3 mb-1 focus-within:border-accent/50 transition-colors">
+        <AtSign className="w-4 h-4 text-faint shrink-0" strokeWidth={2} />
+        <input
+          className="flex-1 bg-transparent py-3 px-2 text-[15px] text-ink outline-none placeholder:text-faint"
+          placeholder="your_username"
+          autoFocus
+          value={username}
+          onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+          maxLength={20}
+        />
+        {checking && <Loader2 className="w-4 h-4 text-muted animate-spin shrink-0" />}
+        {!checking && available === true && valid && (
+          <Check className="w-4 h-4 text-success shrink-0" strokeWidth={2.5} />
+        )}
+        {!checking && available === false && valid && (
+          <X className="w-4 h-4 text-danger shrink-0" strokeWidth={2.5} />
+        )}
+      </div>
+      <p className="text-[11px] text-faint mb-5">
+        {!valid && username.length > 0
+          ? '3–20 characters: letters, numbers, underscores only'
+          : available === false
+            ? 'This username is taken'
+            : 'Unique handle for your profile'}
+      </p>
+
+      <label className="block text-[13px] font-medium text-muted mb-2">Display Name</label>
+      <div className="rounded-xl bg-surface-2 border border-white/5 px-3 focus-within:border-accent/50 transition-colors">
+        <input
+          className="w-full bg-transparent py-3 text-[15px] text-ink outline-none placeholder:text-faint"
+          placeholder="Your Name"
+          value={displayName}
+          onChange={(e) => setDisplayName(e.target.value)}
+          maxLength={30}
+        />
+      </div>
+    </BottomSheet>
+  );
+}
+
 // ── Delete Account sheet ─────────────────────────────────────────────────────
 function DeleteAccountSheet({ isGoogle, onClose, onConfirm }) {
   const { showToast } = useToast();
@@ -347,6 +441,7 @@ function DeleteAccountSheet({ isGoogle, onClose, onConfirm }) {
 export default function SettingsScreen({ state, update }) {
   const { user, signOut, deleteAccount } = useAuth();
   const { showToast } = useToast();
+  const { deletePublicData } = usePublicProfile(user?.uid);
 
   const profile = state.profile ?? emptyProfile();
   const goal    = state.goal    ?? emptyGoal();
@@ -356,9 +451,10 @@ export default function SettingsScreen({ state, update }) {
   const targets = computeNutritionTargets(profile, goal);
   const goalDef = GOAL_TYPES.find((g) => g.id === goal.type) ?? GOAL_TYPES[0];
 
-  const [profileOpen,      setProfileOpen]      = useState(false);
-  const [goalOpen,         setGoalOpen]         = useState(false);
-  const [weightOpen,       setWeightOpen]        = useState(false);
+  const [profileOpen,       setProfileOpen]       = useState(false);
+  const [goalOpen,          setGoalOpen]          = useState(false);
+  const [weightOpen,        setWeightOpen]         = useState(false);
+  const [usernameOpen,      setUsernameOpen]       = useState(false);
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
 
   // Weight log — sorted newest first, show last 4
@@ -371,7 +467,7 @@ export default function SettingsScreen({ state, update }) {
   const displayHeight = (cm) =>
     imperial ? cmToFtIn(cm) : `${cm} cm`;
 
-  const name    = user?.displayName || user?.email?.split('@')[0] || 'Athlete';
+  const name    = state.displayName || state.username || user?.email?.split('@')[0] || 'Athlete';
   const initial = name.charAt(0).toUpperCase();
 
   const profileSummary = profileComplete(profile)
@@ -400,6 +496,12 @@ export default function SettingsScreen({ state, update }) {
     }));
     setWeightOpen(false);
     showToast('Weight logged ✓');
+  };
+
+  const saveUsername = (username, displayName) => {
+    update({ username, displayName });
+    setUsernameOpen(false);
+    showToast('Username updated ✓');
   };
 
   const toggleUnits = () => {
@@ -451,6 +553,9 @@ export default function SettingsScreen({ state, update }) {
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-[17px] font-bold text-ink truncate">{name}</div>
+            {state.username && (
+              <div className="text-sm text-accent-light truncate">@{state.username}</div>
+            )}
             <div className="text-sm text-muted truncate">{profileSummary}</div>
           </div>
           <button
@@ -460,6 +565,15 @@ export default function SettingsScreen({ state, update }) {
             Edit
           </button>
         </Card>
+
+        {/* Username */}
+        <ListRow
+          icon={<AtSign className="w-5 h-5" strokeWidth={1.9} />}
+          title={state.username ? `@${state.username}` : 'Set username'}
+          subtitle={state.displayName || 'Tap to edit'}
+          onClick={() => setUsernameOpen(true)}
+          trailing={<span className="text-sm text-muted">Edit</span>}
+        />
 
         {/* Goal settings */}
         <SectionTitle>Goal Settings</SectionTitle>
@@ -614,11 +728,21 @@ export default function SettingsScreen({ state, update }) {
           onSave={saveWeight}
         />
       )}
+      {usernameOpen && (
+        <UsernameSheet
+          currentUsername={state.username}
+          currentDisplayName={state.displayName}
+          uid={user?.uid}
+          onClose={() => setUsernameOpen(false)}
+          onSave={saveUsername}
+        />
+      )}
       {deleteAccountOpen && (
         <DeleteAccountSheet
           isGoogle={user?.providerData?.some((p) => p.providerId === 'google.com')}
           onClose={() => setDeleteAccountOpen(false)}
           onConfirm={async (pw) => {
+            await deletePublicData(state.username);
             await deleteAccount(pw);
           }}
         />

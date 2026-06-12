@@ -21,6 +21,32 @@ service cloud.firestore {
       allow write: if isVerifiedOwner(userId) && isValidFitlogDoc();
     }
 
+    // ── Username reservation ──────────────────────────────────────────────
+    // Maps lowercase username → { uid }. Ensures global uniqueness.
+    match /usernames/{username} {
+      allow read:   if request.auth != null;
+      allow create: if request.auth != null
+                    && request.resource.data.keys().hasOnly(['uid'])
+                    && request.resource.data.uid == request.auth.uid;
+      allow delete: if request.auth != null
+                    && resource.data.uid == request.auth.uid;
+    }
+
+    // ── Public profile ─────────────────────────────────────────────────────
+    // Visible to all authenticated users (for friends / ranking).
+    match /publicProfiles/{userId} {
+      allow read:  if request.auth != null;
+      allow write: if request.auth != null
+                   && request.auth.uid == userId
+                   && request.resource.data.keys().hasOnly(['username', 'displayName', 'updatedAt', 'joinedAt'])
+                   && request.resource.data.username is string
+                   && request.resource.data.username.size() <= 20
+                   && request.resource.data.displayName is string
+                   && request.resource.data.displayName.size() <= 30;
+      allow delete: if request.auth != null
+                    && request.auth.uid == userId;
+    }
+
     // Everything else — subcollections, other paths — denied by default.
   }
 
@@ -52,7 +78,8 @@ service cloud.firestore {
       'units', 'notificationsEnabled',
       'mealTemplates', 'exerciseTemplates',
       'workoutSplits', 'activeSplitId',
-      'mealDays'
+      'mealDays',
+      'username', 'displayName'
     ];
 
     // ── 2. Scalar type + length guards ──────────────────────────────────────
@@ -63,7 +90,9 @@ service cloud.firestore {
       && (!('notificationsEnabled' in d) || d.notificationsEnabled is bool)
       && (!('activeDate'           in d) || d.activeDate == null || d.activeDate is string)
       && (!('lastWorkoutDate'      in d) || d.lastWorkoutDate == null || d.lastWorkoutDate is string)
-      && (!('activeSplitId'        in d) || d.activeSplitId == null || d.activeSplitId is string);
+      && (!('activeSplitId'        in d) || d.activeSplitId == null || d.activeSplitId is string)
+      && (!('username'             in d) || d.username == null    || (d.username is string    && d.username.size()    <= 20))
+      && (!('displayName'          in d) || d.displayName == null || (d.displayName is string && d.displayName.size() <= 30));
 
     // ── 3. Array size guards ─────────────────────────────────────────────────
     let arraysOk =

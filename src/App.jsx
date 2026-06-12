@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import BottomTabBar from '@/components/ui/BottomTabBar';
 import SignIn from '@/components/SignIn';
+import UsernameSetup from '@/components/UsernameSetup';
 import DashboardScreen from '@/screens/DashboardScreen';
 import ExerciseScreen from '@/screens/ExerciseScreen';
 import NutritionScreen from '@/screens/NutritionScreen';
@@ -11,7 +12,7 @@ import { lastWorkoutIso } from '@/lib/fitlog';
 
 export default function App() {
   const { user, loading, isAuthenticated } = useAuth();
-  const { state, update, today } = useFitlogData(user?.uid ?? null);
+  const { state, update, synced, today } = useFitlogData(user?.uid ?? null);
   const [tab, setTab] = useState('dashboard');
 
   // ── Workout reminder notification ─────────────────────────────────────────
@@ -53,6 +54,23 @@ export default function App() {
   }
 
   if (!isAuthenticated) return <SignIn />;
+
+  // Username onboarding gate — wait for Firestore sync to avoid flash
+  if (!state.username) {
+    if (user?.uid && !synced) {
+      return (
+        <div className="flex-1 grid place-items-center">
+          <div className="text-sm text-muted">Loading…</div>
+        </div>
+      );
+    }
+    return (
+      <UsernameSetup
+        uid={user.uid}
+        onComplete={(u, dn) => update({ username: u, displayName: dn })}
+      />
+    );
+  }
 
   return (
     <>

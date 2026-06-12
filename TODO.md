@@ -31,22 +31,22 @@
 - [x] Rest day card UI with next workout info
 - [x] Split manager/selector/activator UI
 
-## Phase 5 — Consistency Score Revamp
-- [ ] Add `mealDays` to `emptyState()` (`lib/fitlog.js`)
-- [ ] Track meal days on meal save (`NutritionScreen.jsx`)
-- [ ] Rewrite `consistencyScore()` — 6 components + decay (`lib/fitlog.js`)
-- [ ] Update `consistencyTrend()` (`lib/fitlog.js`)
-- [ ] Add `mealDays` to Firestore rules
-- [ ] Verify Dashboard ScoreRing displays updated score
+## Phase 5 — Consistency Score Revamp ✅
+- [x] Add `mealDays` to `emptyState()` (`lib/fitlog.js`)
+- [x] Track meal days on meal save (`NutritionScreen.jsx`)
+- [x] Rewrite `consistencyScore()` — 6 components + decay (`lib/fitlog.js`)
+- [x] Update `consistencyTrend()` (`lib/fitlog.js`)
+- [x] Add `mealDays` to Firestore rules
+- [x] Verify Dashboard ScoreRing displays updated score
 
-## Phase 6 — Username + Public Profile
-- [ ] Add `username`, `displayName` to `emptyState()` (`lib/fitlog.js`)
-- [ ] Create `usePublicProfile` hook (`src/hooks/usePublicProfile.js`)
-- [ ] `usernames/{username}` collection + Firestore rules
-- [ ] `publicProfiles/{uid}` collection + Firestore rules
-- [ ] Username/display name editor in Settings
-- [ ] Onboarding prompt for new users
-- [ ] Real-time username availability check
+## Phase 6 — Username + Public Profile ✅
+- [x] Add `username`, `displayName` to `emptyState()` (`lib/fitlog.js`)
+- [x] Create `usePublicProfile` hook (`src/hooks/usePublicProfile.js`)
+- [x] `usernames/{username}` collection + Firestore rules
+- [x] `publicProfiles/{uid}` collection + Firestore rules
+- [x] Username/display name editor in Settings
+- [x] Onboarding prompt for new users
+- [x] Real-time username availability check
 
 ## Phase 7 — Friends System
 - [ ] Create `useFriends` hook (`src/hooks/useFriends.js`)

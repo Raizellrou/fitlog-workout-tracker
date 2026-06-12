@@ -109,6 +109,8 @@ export function previewState() {
     ],
     activeSplitId: 'sp1',
     mealDays: ['2026-06-01', '2026-06-02', '2026-06-03', '2026-06-04'],
+    username: 'charlesfit',
+    displayName: 'Charles',
     profile: { sex: 'male', age: 28, heightCm: 180, weightKg: 78.5, activityLevel: 'moderate' },
     goal: { type: 'lean_bulk', targetWeightKg: 82, proteinPerLb: 1.0 },
   };

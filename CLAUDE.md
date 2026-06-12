@@ -43,8 +43,10 @@ Copy `.env.example` → `.env` and fill in Firebase web config. All `VITE_FIREBA
 | Path | Contents |
 |---|---|
 | `users/{uid}/data/fitlog` | Single doc — entire app state (see `emptyState()` in `lib/fitlog.js`) |
+| `usernames/{username}` | `{ uid }` — global username reservation (uniqueness map) |
+| `publicProfiles/{uid}` | `{ username, displayName, joinedAt, updatedAt }` — public-facing profile |
 
-Security rules in `firestore.rules`: email-verified owner only, field allow-list, scalar type checks, array size caps. Deploy with `firebase deploy --only firestore:rules`.
+Security rules in `firestore.rules`: email-verified owner only, field allow-list, scalar type checks, array size caps. `usernames` and `publicProfiles` are readable by any authenticated user. Deploy with `firebase deploy --only firestore:rules`.
 
 ### State shape
 
@@ -69,6 +71,9 @@ Security rules in `firestore.rules`: email-verified owner only, field allow-list
   exerciseTemplates: ExerciseTemplate[], // saved exercise presets (capped ≤100)
   workoutSplits: Split[],             // workout programs with per-day exercises (capped ≤10)
   activeSplitId: string | null,       // currently active split program
+  mealDays: ISO[],                    // dates with ≥1 meal logged (capped ≤30, for consistency score)
+  username: string | null,            // unique lowercase handle (3-20 chars, a-z0-9_)
+  displayName: string | null,         // free-form display name (up to 30 chars)
 }
 ```
 
@@ -83,7 +88,7 @@ A `Split` is `{ id, name, days: { mon..sun: SplitDay } }` where `SplitDay` is `{
 
 ```
 src/
-├── App.jsx                    # 4-tab shell; routes to screens; no business logic
+├── App.jsx                    # 4-tab shell; routes to screens; username onboarding gate
 ├── firebase.js                # Firebase init + env validation
 ├── index.css                  # Tailwind v4 @theme tokens + global styles
 ├── context/
@@ -91,7 +96,8 @@ src/
 │   └── ToastContext.jsx        # Global showToast()
 ├── hooks/
 │   ├── useFitlogData.js        # Firestore sync + localStorage cache (SoT) + trimForFirestore()
-│   └── useFoodSearch.js        # Searches local FOODS + customFoods by substring
+│   ├── useFoodSearch.js        # Searches local FOODS + customFoods by substring
+│   └── usePublicProfile.js     # Username claiming + public profile (Firestore transactions)
 ├── lib/
 │   ├── fitlog.js               # Pure domain logic: factories, stats, streak, recovery, consistencyScore
 │   ├── foodData.js             # Static USDA-seeded food table (~80 foods + variants)
@@ -99,12 +105,13 @@ src/
 ├── components/
 │   ├── SignIn.jsx              # Email/password sign-in + sign-up form
 │   ├── EmailVerification.jsx   # Post-sign-up email verification gate
-│   └── ui/                    # 17 shared design-system primitives (see below)
+│   ├── UsernameSetup.jsx       # Post-auth onboarding: choose username + display name
+│   └── ui/                    # 18 shared design-system primitives (see below)
 └── screens/
     ├── DashboardScreen.jsx     # Hero card, Consistency Score, intake, notices
     ├── ExerciseScreen.jsx      # Weekly streak, grouped exercises, Log Workout, Cardio
     ├── NutritionScreen.jsx     # Calorie arc gauge, meal list, Add Meal sheet
-    └── SettingsScreen.jsx      # Profile, goal, activity history, settings toggles
+    └── SettingsScreen.jsx      # Profile, goal, username editor, activity history, settings
 ```
 
 ### Shared UI components (`src/components/ui/`)
@@ -192,6 +199,7 @@ Consumers: Dashboard intake card + weight-to-goal notice, Nutrition `ArcGauge`, 
 | `exercisesFromSplitDay(splitDay)` | Creates live exercises from a split day's exercise list |
 | `splitWorkoutDays(split)` | Count of non-rest days in a split |
 | `nextSplitWorkoutDay(split, todayIso)` | Next non-rest day label (cycles through 7 days) |
+| `isValidUsername(u)` | True if `u` matches `[a-z0-9_]{3,20}` |
 
 ## Key Conventions
 
@@ -207,6 +215,7 @@ Consumers: Dashboard intake card + weight-to-goal notice, Nutrition `ArcGauge`, 
 - Delete actions always go through `ConfirmSheet` for user confirmation.
 - Workout splits use `sessionStorage` stamp (`${activeSplitId}_${today}`) to prevent re-triggering auto-populate.
 - New Firestore fields MUST be added to the allow-list in `firestore.rules` or writes silently fail.
+- Username is required — `App.jsx` gates on `state.username` and shows `UsernameSetup` until one is claimed. Username claiming uses a Firestore transaction (`usePublicProfile`) for atomicity.
 
 ## Build roadmap
 
@@ -218,8 +227,8 @@ Consumers: Dashboard intake card + weight-to-goal notice, Nutrition `ArcGauge`, 
 | 2 | Custom meal templates | Done |
 | 3 | Custom exercise templates | Done |
 | 4 | Workout splits (programs, auto-populate, rest days) | Done |
-| 5 | Consistency Score revamp (nutrition + split adherence + decay) | Pending |
-| 6 | Username + public profile | Pending |
+| 5 | Consistency Score revamp (nutrition + split adherence + decay) | Done |
+| 6 | Username + public profile | Done |
 | 7 | Friends system | Pending |
 | 8 | Ranking tab + push notifications | Pending |
 

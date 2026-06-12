@@ -103,7 +103,15 @@ export function emptyState() {
     workoutSplits: [],       // named split programs (PPL, Upper/Lower, etc.)
     activeSplitId: null,     // ID of the currently active split, or null
     mealDays: [],            // ISO dates on which ≥1 meal was logged (capped 30)
+    username: null,          // unique lowercase handle (3-20 chars, a-z0-9_)
+    displayName: null,       // free-form display name (up to 30 chars)
   };
+}
+
+// ── USERNAME VALIDATION ──
+export const USERNAME_REGEX = /^[a-z0-9_]{3,20}$/;
+export function isValidUsername(u) {
+  return typeof u === 'string' && USERNAME_REGEX.test(u);
 }
 
 /** Most recent weight log entry sorted by date, or null. */
